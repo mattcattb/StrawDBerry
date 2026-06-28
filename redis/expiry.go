@@ -6,11 +6,6 @@ import (
 )
 
 func (ce *CommandExecutor) Exists(args []resp.Value) resp.Value {
-
-	if len(args) < 1 {
-		return wrongArgs("exists")
-	}
-
 	existsKeys := make([]string, len(args))
 
 	for i := 0; i < len(args); i += 1 {
@@ -47,10 +42,6 @@ func (ce *CommandExecutor) Ttl(args []resp.Value) resp.Value {
 		Integer reply: -2 if the key does not exist.
 	*/
 
-	if len(args) != 1 {
-		return wrongArgs("ttl")
-	}
-
 	key, ok := args[0].BulkString()
 	if !ok {
 		return syntaxError()
@@ -76,11 +67,6 @@ func (ce *CommandExecutor) Ttl(args []resp.Value) resp.Value {
 }
 
 func (ce *CommandExecutor) Del(args []resp.Value) resp.Value {
-
-	if len(args) < 1 {
-		return wrongArgs("del")
-	}
-
 	delKeys := make([]string, len(args))
 
 	for i := 0; i < len(args); i += 1 {
@@ -120,10 +106,6 @@ func (ce *CommandExecutor) Echo(args []resp.Value) resp.Value
 
 // string, list, set, zset, hash, stream, and vectorset.
 func (ce *CommandExecutor) Type(args []resp.Value) resp.Value {
-	if len(args) != 1 {
-		return wrongArgs("type")
-	}
-
 	key, ok := args[0].BulkString()
 
 	if !ok {

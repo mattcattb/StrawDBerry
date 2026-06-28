@@ -69,10 +69,6 @@ func setStringObjectValue(obj *RedisObject, value string) {
 }
 
 func (ce *CommandExecutor) Set(args []resp.Value) resp.Value {
-	if len(args) < 2 {
-		return wrongArgs("set")
-	}
-
 	key, ok := args[0].BulkString()
 	if !ok {
 		return syntaxError()

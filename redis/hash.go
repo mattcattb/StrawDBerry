@@ -92,10 +92,6 @@ func (ce *CommandExecutor) HSet(args []resp.Value) resp.Value {
 		return wrongTypeError()
 	}
 
-	if len(strArgs) < 3 {
-		return wrongArgs("hset")
-	}
-
 	key := strArgs[0]
 	kvArray := strArgs[1:]
 
