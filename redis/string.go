@@ -356,14 +356,9 @@ func (ce *CommandExecutor) MGet(args []resp.Value) resp.Value {
 	mKeys := make([]string, len(args))
 	respValues := make([]resp.Value, 0)
 
-	for i, arg := range args {
-		key, ok := arg.BulkString()
-
-		if !ok {
-			return syntaxError()
-		}
-
-		mKeys[i] = key
+	mKeys, err := parseBulkRespStringCommands(args)
+	if err != nil {
+		return wrongTypeError()
 	}
 
 	for _, key := range mKeys {
