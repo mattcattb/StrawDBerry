@@ -13,12 +13,13 @@ func TestReadSimpleString(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if value.typ != "string" {
-		t.Fatalf("typ = %q, want %q", value.typ, "string")
+	s, ok := value.SimpleString()
+	if !ok {
+		t.Fatal("value is not a simple string")
 	}
 
-	if value.str != "OK" {
-		t.Fatalf("str = %q, want %q", value.str, "OK")
+	if s != "OK" {
+		t.Fatalf("str = %q, want %q", s, "OK")
 	}
 }
 
@@ -30,12 +31,13 @@ func TestReadInteger(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if value.typ != "integer" {
-		t.Fatalf("typ = %q, want %q", value.typ, "integer")
+	n, ok := value.Integer()
+	if !ok {
+		t.Fatal("value is not an integer")
 	}
 
-	if value.num != -42 {
-		t.Fatalf("num = %d, want %d", value.num, -42)
+	if n != -42 {
+		t.Fatalf("num = %d, want %d", n, -42)
 	}
 }
 
@@ -47,12 +49,26 @@ func TestReadBulkString(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if value.typ != "bulk-string" {
-		t.Fatalf("typ = %q, want %q", value.typ, "bulk-string")
+	s, ok := value.BulkString()
+	if !ok {
+		t.Fatal("value is not a bulk string")
 	}
 
-	if value.bulk != "hello" {
-		t.Fatalf("bulk = %q, want %q", value.bulk, "hello")
+	if s != "hello" {
+		t.Fatalf("bulk = %q, want %q", s, "hello")
+	}
+}
+
+func TestReadNullBulkString(t *testing.T) {
+	r := NewResp(strings.NewReader("$-1\r\n"))
+
+	value, err := r.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !value.IsNull() {
+		t.Fatalf("value = %#v, want null", value)
 	}
 }
 
@@ -64,20 +80,23 @@ func TestReadArray(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if value.typ != "array" {
-		t.Fatalf("typ = %q, want %q", value.typ, "array")
+	values, ok := value.Array()
+	if !ok {
+		t.Fatal("value is not an array")
 	}
 
-	if len(value.array) != 2 {
-		t.Fatalf("len(array) = %d, want %d", len(value.array), 2)
+	if len(values) != 2 {
+		t.Fatalf("len(array) = %d, want %d", len(values), 2)
 	}
 
-	if value.array[0].str != "PING" {
-		t.Fatalf("first array value = %q, want %q", value.array[0].str, "PING")
+	s, ok := values[0].SimpleString()
+	if !ok || s != "PING" {
+		t.Fatalf("first array value = %q, want %q", s, "PING")
 	}
 
-	if value.array[1].bulk != "hello" {
-		t.Fatalf("second array value = %q, want %q", value.array[1].bulk, "hello")
+	s, ok = values[1].BulkString()
+	if !ok || s != "hello" {
+		t.Fatalf("second array value = %q, want %q", s, "hello")
 	}
 }
 
@@ -89,21 +108,24 @@ func TestReadMap(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if value.typ != "map" {
-		t.Fatalf("typ = %q, want %q", value.typ, "map")
+	pairs, ok := value.Map()
+	if !ok {
+		t.Fatal("value is not a map")
 	}
 
-	if len(value.MAP) != 1 {
-		t.Fatalf("len(MAP) = %d, want %d", len(value.MAP), 1)
+	if len(pairs) != 1 {
+		t.Fatalf("len(map) = %d, want %d", len(pairs), 1)
 	}
 
-	pair := value.MAP[0]
+	pair := pairs[0]
 
-	if pair[0].str != "name" {
-		t.Fatalf("map key = %q, want %q", pair[0].str, "name")
+	key, ok := pair[0].SimpleString()
+	if !ok || key != "name" {
+		t.Fatalf("map key = %q, want %q", key, "name")
 	}
 
-	if pair[1].bulk != "mat" {
-		t.Fatalf("map value = %q, want %q", pair[1].bulk, "mat")
+	val, ok := pair[1].BulkString()
+	if !ok || val != "mat" {
+		t.Fatalf("map value = %q, want %q", val, "mat")
 	}
 }

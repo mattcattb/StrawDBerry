@@ -1,9 +1,8 @@
-package command
+package redis
 
 import (
 	"go-redis/persistance"
 	"go-redis/resp"
-	"go-redis/store"
 	"strings"
 )
 
@@ -27,8 +26,8 @@ const (
 )
 
 type CommandExecutor struct {
-	store *store.RedisStore
-	aof   *persistance.Aof
+	db  *RedisDb
+	aof *persistance.Aof
 }
 
 // HMMM lets try to get structured commands here
@@ -38,13 +37,13 @@ func (e *CommandExecutor) Execute(v resp.Value) resp.Value {
 	command, args, ok := parseCommand(v)
 
 	if !ok {
-		return resp.ErrorValue("Invalid command structure")
+		return syntaxError()
 	}
 
 	switch CommandType(command) {
 
 	case CommandPing:
-		return e.ping(args)
+		return e.Ping(args)
 
 	case CommandHSet:
 		return e.HSet(args)
@@ -84,17 +83,29 @@ func parseCommand(v resp.Value) (CommandType, []resp.Value, bool) {
 }
 
 func wrongArgs(command string) resp.Value {
-	return resp.ErrorValue("ERR wrong number of arguments for " + command + " command")
+	return resp.Error("ERR wrong number of arguments for '" + command + "' command")
 }
 
 func syntaxError() resp.Value {
-	return resp.ErrorValue("ERR syntax error")
+	return resp.Error("ERR syntax error")
 }
 
 func invalidInteger() resp.Value {
-	return resp.ErrorValue("ERR value is not an integer or out of range")
+	return resp.Error("ERR value is not an integer or out of range")
+}
+
+func wrongTypeError() resp.Value {
+	return resp.Error("WRONGTYPE Operation against a key holding the wrong kind of value")
 }
 
 func unknownCommand(command string) resp.Value {
-	return resp.ErrorValue("ERR unknown command '" + command + "'")
+	return resp.Error("ERR unknown command '" + command + "'")
+}
+
+func internalError() resp.Value {
+	return resp.Error("ERR internal server error")
+}
+
+func parseBulkRespStringCommands(args []resp.Value) []string {
+	// parse all args into a string array
 }

@@ -8,31 +8,31 @@ import (
 func (v Value) Marshal() []byte {
 	switch v.typ {
 
-	case BulkError:
+	case bulkError:
 		return v.marshalBulkError()
 
-	case SimpleError:
+	case simpleError:
 		return v.marshalSimpleError()
 
-	case Array:
+	case array:
 		return v.marshalArray()
 
-	case Integer:
+	case integer:
 		return v.marshalInteger()
 
-	case BulkString:
+	case bulkString:
 		return v.marshalBulk()
 
-	case SimpleString:
+	case simpleString:
 		return v.marshalString()
 
-	case Boolean:
+	case boolean:
 		return v.marshalBoolean()
 
-	case NULL:
+	case nullValue:
 		return v.marshalNull()
 
-	case Map:
+	case mapValue:
 		return v.marshalMap()
 	}
 
@@ -55,6 +55,8 @@ func (v Value) marshalBulkError() []byte {
 
 	bytes := []byte{byte(v.typ)}
 
+	bytes = append(bytes, (strconv.Itoa(len(v.str)))...)
+	bytes = append(bytes, '\r', '\n')
 	bytes = append(bytes, v.str...)
 	bytes = append(bytes, '\r', '\n')
 
@@ -64,7 +66,7 @@ func (v Value) marshalBulkError() []byte {
 func (v Value) marshalArray() []byte {
 	// *<number-of-elements>\r\n<element-1>...<element-n>
 
-	bytes := []byte{byte(Array)}
+	bytes := []byte{byte(array)}
 	bytes = append(bytes, (strconv.Itoa(len(v.array)))...)
 	bytes = append(bytes, '\r', '\n')
 
@@ -78,7 +80,7 @@ func (v Value) marshalArray() []byte {
 func (v Value) marshalString() []byte {
 	// +OK\r\n
 
-	bytes := []byte{byte(SimpleString)}
+	bytes := []byte{byte(simpleString)}
 
 	bytes = append(bytes, v.str...)
 	bytes = append(bytes, '\r', '\n')
@@ -87,7 +89,7 @@ func (v Value) marshalString() []byte {
 
 func (v Value) marshalBoolean() []byte {
 	// #<t|f>\r\n
-	bytes := []byte{byte(Boolean)}
+	bytes := []byte{byte(boolean)}
 
 	var boolChar = "f"
 	if v.boolean {
@@ -101,7 +103,7 @@ func (v Value) marshalBoolean() []byte {
 func (v Value) marshalBulk() []byte {
 	// $<length>\r\n<data>\r\n
 
-	bytes := []byte{byte(BulkString)}
+	bytes := []byte{byte(bulkString)}
 	bytes = append(bytes, (strconv.Itoa(len(v.str)))...)
 	bytes = append(bytes, '\r', '\n')
 	bytes = append(bytes, v.str...)
@@ -112,34 +114,24 @@ func (v Value) marshalBulk() []byte {
 func (v Value) marshalInteger() []byte {
 	// :[<+|->]<value>\r\n
 
-	bytes := []byte{byte(Integer)}
+	bytes := []byte{byte(integer)}
 
-	var sign = "+"
-	var val = v.num
-
-	if v.num < 0 {
-		val *= -1
-		sign = "-"
-	} else if v.num == 0 {
-		sign = ""
-	}
-
-	bytes = append(bytes, sign...)
-	bytes = append(bytes, (strconv.Itoa(val))...)
+	bytes = append(bytes, (strconv.Itoa(v.num))...)
 	bytes = append(bytes, '\r', '\n')
 	return bytes
 }
 
 func (v Value) marshalMap() []byte {
 	// %<number-of-entries>\r\n<key-1><value-1>...<key-n><value-n>
-	bytes := []byte{byte(Map)}
+	bytes := []byte{byte(mapValue)}
 
-	numEntries := len(v.MAP)
+	numEntries := len(v.pairs)
 
 	bytes = append(bytes, (strconv.Itoa(numEntries))...)
+	bytes = append(bytes, '\r', '\n')
 
 	for i := 0; i < numEntries; i += 1 {
-		entry := v.MAP[i]
+		entry := v.pairs[i]
 		k := entry[0]
 		v := entry[1]
 
@@ -152,7 +144,7 @@ func (v Value) marshalMap() []byte {
 
 }
 func (v Value) marshalNull() []byte {
-	return []byte{byte(NULL), '\r', '\n'}
+	return []byte{byte(nullValue), '\r', '\n'}
 }
 
 type Writer struct {

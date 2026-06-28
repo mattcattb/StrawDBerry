@@ -48,29 +48,33 @@ func (r *Resp) Read() (Value, error) {
 		return Value{}, err
 	}
 
-	switch ValueType(_type) {
-	case SimpleString:
+	switch valueType(_type) {
+	case simpleString:
 		return r.readSimpleString()
-	case BulkString:
+	case simpleError:
+		return r.readSimpleError()
+	case bulkString:
 		return r.readBulk()
+	case bulkError:
+		return r.readBulkError()
 
-	case Integer:
+	case integer:
 		return r.readIntegerResp()
 
-	case BigNumber:
+	case bigNumber:
 
-	case Double:
+	case double:
 
-	case Boolean:
+	case boolean:
 		return r.readBoolean()
 
-	case Array:
+	case array:
 		return r.readArray()
 
-	case NULL:
+	case nullValue:
 		return r.readNull()
 
-	case Map:
+	case mapValue:
 		return r.readMap()
 	default:
 	}
@@ -83,7 +87,7 @@ func (r *Resp) readNull() (Value, error) {
 		return Value{}, err
 	}
 
-	return Value{typ: NULL}, nil
+	return Null(), nil
 }
 
 func (r *Resp) readSimpleString() (Value, error) {
@@ -92,7 +96,7 @@ func (r *Resp) readSimpleString() (Value, error) {
 		return Value{}, err
 	}
 
-	return Value{typ: SimpleString, str: string(line)}, nil
+	return SimpleString(string(line)), nil
 }
 
 func (r *Resp) readSimpleError() (val Value, err error) {
@@ -104,7 +108,7 @@ func (r *Resp) readSimpleError() (val Value, err error) {
 		return val, err
 	}
 
-	return Value{typ: SimpleError, str: string(line)}, nil
+	return SimpleError(string(line)), nil
 }
 
 func (r *Resp) readBulkError() (val Value, err error) {
@@ -129,7 +133,7 @@ func (r *Resp) readBulkError() (val Value, err error) {
 		return Value{}, err
 	}
 
-	return Value{typ: BulkError, str: string(buf)}, nil
+	return Value{typ: bulkError, str: string(buf)}, nil
 
 }
 
@@ -152,7 +156,7 @@ func (r *Resp) readBoolean() (val Value, err error) {
 		return Value{}, fmt.Errorf("booleans expect t or f")
 	}
 
-	return Value{typ: Boolean, boolean: lineStr == "t"}, nil
+	return Boolean(lineStr == "t"), nil
 }
 
 func (r *Resp) readIntegerResp() (val Value, err error) {
@@ -164,7 +168,7 @@ func (r *Resp) readIntegerResp() (val Value, err error) {
 		return val, err
 	}
 
-	return Value{typ: Integer, num: x}, nil
+	return Integer(x), nil
 }
 
 func (r *Resp) readBulk() (Value, error) {
@@ -175,6 +179,13 @@ func (r *Resp) readBulk() (Value, error) {
 		return Value{}, err
 	}
 
+	if size == -1 {
+		return Null(), nil
+	}
+	if size < -1 {
+		return Value{}, fmt.Errorf("invalid bulk string length %d", size)
+	}
+
 	buf := make([]byte, size)
 	if _, err := io.ReadFull(r.reader, buf); err != nil {
 		return Value{}, err
@@ -182,7 +193,7 @@ func (r *Resp) readBulk() (Value, error) {
 	if _, _, err := r.readLine(); err != nil {
 		return Value{}, err
 	}
-	return Value{typ: BulkString, str: string(buf)}, nil
+	return BulkString(string(buf)), nil
 
 }
 
@@ -196,7 +207,14 @@ func (r *Resp) readArray() (Value, error) {
 		return v, err
 	}
 
-	v.typ = Array
+	if len == -1 {
+		return Null(), nil
+	}
+	if len < -1 {
+		return Value{}, fmt.Errorf("invalid array length %d", len)
+	}
+
+	v.typ = array
 	v.array = make([]Value, 0)
 
 	for i := 0; i < len; i += 1 {
@@ -221,8 +239,8 @@ func (r *Resp) readMap() (Value, error) {
 	}
 
 	val := Value{}
-	val.typ = Map
-	val.MAP = make([][2]Value, 0)
+	val.typ = mapValue
+	val.pairs = make([][2]Value, 0)
 
 	for i := 0; i < len; i += 1 {
 		key, err := r.Read()
@@ -236,7 +254,7 @@ func (r *Resp) readMap() (Value, error) {
 			return val, err
 		}
 
-		val.MAP = append(val.MAP, [2]Value{key, value})
+		val.pairs = append(val.pairs, [2]Value{key, value})
 
 	}
 
