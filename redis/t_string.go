@@ -17,72 +17,49 @@ func tryParseInt(val string) (int, bool) {
 
 }
 
-func newStringObject(value string) *RedisObject {
-
-	if n, ok := tryParseInt(value); ok {
-		return &RedisObject{
-			typ:      StringObject,
-			encoding: EncodingInt,
-			ptr:      n,
-		}
-	}
-
-	return &RedisObject{
-		typ:      StringObject,
-		encoding: EncodingRaw,
-		ptr:      value,
-	}
-}
-
 func registerTstringCommands(sh *SpecHandler) {
 
 	specMap := map[string]CommandSpec{
 		"GET": CommandSpec{
-			minArgs: 1,
-			maxArgs: 1,
+			arity:   1,
 			flags:   CmdRead,
 			handler: Get,
 		},
 		"SET": CommandSpec{
-			minArgs: 2,
-			maxArgs: -1,
+			arity:   -2,
 			flags:   CmdWrite,
 			handler: Set,
 		},
-		"MGET": CommandSpec{minArgs: 1,
-			maxArgs: -1,
+		"MGET": CommandSpec{
+			arity:   -1,
 			flags:   CmdRead,
-			handler: MGet},
+			handler: MGet,
+		},
 
 		"MSET": CommandSpec{
-			minArgs: 2,
-			maxArgs: -1,
+			arity:   -2,
 			flags:   CmdWrite,
 			handler: MSet,
 		},
 		"INCR": {
-			minArgs: 1,
-			maxArgs: 1,
+			arity:   1,
 			handler: Incr,
 			flags:   CmdWrite,
 		},
 		"DECR": {
-			minArgs: 1,
-			maxArgs: 1,
+			arity:   1,
 			handler: Decr,
 			flags:   CmdWrite,
 		},
 
 		"INCRBY": {
-			minArgs: 2,
-			maxArgs: 2,
+			arity:   2,
 			handler: IncrBy,
 			flags:   CmdWrite,
 		},
 
 		"DECRBY": {
-			minArgs: 2,
-			maxArgs: 2,
+			arity:   2,
 			handler: DecrBy,
 			flags:   CmdWrite,
 		},
@@ -97,6 +74,23 @@ func registerTstringCommands(sh *SpecHandler) {
 	sh.registerCommandSpecs(specMap)
 }
 
+func newStringObject(value string) *RedisObject {
+
+	if n, ok := tryParseInt(value); ok {
+		return &RedisObject{
+			typ:      StringObject,
+			encoding: EncodingInt,
+			ptr:      intStringPayload(n),
+		}
+	}
+
+	return &RedisObject{
+		typ:      StringObject,
+		encoding: EncodingRaw,
+		ptr:      rawStringPayload(value),
+	}
+}
+
 func stringObjectValue(obj *RedisObject) (string, error) {
 	if obj.typ != StringObject {
 		return "", ErrWrongType
@@ -104,18 +98,18 @@ func stringObjectValue(obj *RedisObject) (string, error) {
 
 	switch obj.encoding {
 	case EncodingRaw:
-		value, ok := obj.ptr.(string)
+		value, ok := obj.ptr.(rawStringPayload)
 		if !ok {
 			return "", ErrInvalidEncoding
 		}
-		return value, nil
+		return string(value), nil
 
 	case EncodingInt:
-		value, ok := obj.ptr.(int)
+		value, ok := obj.ptr.(intStringPayload)
 		if !ok {
 			return "", ErrInvalidEncoding
 		}
-		return strconv.Itoa(value), nil
+		return strconv.Itoa(int(value)), nil
 	}
 
 	return "", ErrInvalidEncoding
@@ -124,12 +118,12 @@ func stringObjectValue(obj *RedisObject) (string, error) {
 func setStringObjectValue(obj *RedisObject, value string) {
 	if n, ok := tryParseInt(value); ok {
 		obj.encoding = EncodingInt
-		obj.ptr = n
+		obj.ptr = intStringPayload(n)
 		return
 	}
 
 	obj.encoding = EncodingRaw
-	obj.ptr = value
+	obj.ptr = rawStringPayload(value)
 }
 
 func Set(c *CommandContext, args []Value) CommandResult {

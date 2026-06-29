@@ -24,7 +24,7 @@ func (s *Server) RegisterAllCommandHandlers() {
 	sh := s.sh
 	registerConnectionCommands(sh)
 	registerGenericCommands(sh)
-	registerPubsubCommands(sh)
+	registerTransactionSpec(sh)
 	registerPubsubCommands(sh)
 	registerTHashCommandSpec(sh)
 	registerTstringCommands(sh)

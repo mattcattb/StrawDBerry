@@ -1,4 +1,4 @@
-
+package redis
 
 type SMessage struct {
 	Id   string
@@ -8,10 +8,10 @@ type SMessage struct {
 type Stream struct {
 }
 
-func XAdd(c *Client, args []Value) CommandResult {}
+func XAdd(c *Client, args []Value) CommandResult
 
-func XRange(c *Client, args []Value) {}
+func XRange(c *Client, args []Value)
 
-func XRead(c *Client, args []Value) {
-	// COUNT and BLOCK
-}
+func XRead(c *Client, args []Value)
+
+// COUNT and BLOCK

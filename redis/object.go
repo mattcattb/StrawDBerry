@@ -19,20 +19,32 @@ type ObjectEncoding uint8
 const (
 	EncodingRaw ObjectEncoding = iota
 	EncodingInt
-	EncodingMap
-	EncodingListpack
-	EncodingIntSet
-	EncodingQuicklist
+	EncodingHashMap
+	EncodingSetMap
 )
+
+type objectPayload interface {
+	objectPayload()
+}
+
+type rawStringPayload string
+type intStringPayload int
+type hashMapPayload map[string]string
+type setMapPayload map[string]struct{}
+
+func (rawStringPayload) objectPayload() {}
+func (intStringPayload) objectPayload() {}
+func (hashMapPayload) objectPayload()   {}
+func (setMapPayload) objectPayload()    {}
 
 type RedisObject struct {
 	typ       ObjectType
 	encoding  ObjectEncoding
-	ptr       any
+	ptr       objectPayload
 	expiresAt time.Time
 }
 
-func newObject(typ ObjectType, encoding ObjectEncoding, ptr any) *RedisObject {
+func newObject(typ ObjectType, encoding ObjectEncoding, ptr objectPayload) *RedisObject {
 	return &RedisObject{
 		typ:      typ,
 		encoding: encoding,

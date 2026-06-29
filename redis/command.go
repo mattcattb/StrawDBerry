@@ -90,7 +90,7 @@ func internalError() Value {
 	return Error("ERR internal server error")
 }
 
-func mapRedisError(err error) Value {
+func mapRedisErrorToResp(err error) Value {
 
 	switch {
 	case errors.Is(err, ErrWrongType):
@@ -101,7 +101,6 @@ func mapRedisError(err error) Value {
 	}
 
 	return internalError()
-
 }
 
 func parseBulkRespStringCommands(args []Value) ([]string, error) {

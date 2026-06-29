@@ -11,13 +11,13 @@ type PubSub struct {
 func registerPubsubCommands(sh *SpecHandler) {
 	pubsubRegistry := map[string]CommandSpec{
 		"SUBSCRIBE": {
-			name:    "SUBSCRIBE",
-			minArgs: 1,
 			handler: Subscribe,
+			arity:   -1,
 			group:   PubsubGroup,
 			flags:   CmdPubSubOnly,
 		}, "UNSUBSCRIBE": {
 			handler: Unsubscribe,
+			arity:   -1,
 			group:   PubsubGroup,
 			flags:   CmdPubSubOnly,
 		},

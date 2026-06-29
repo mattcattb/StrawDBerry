@@ -4,43 +4,41 @@ func registerTHashCommandSpec(sh *SpecHandler) {
 
 	hSpecs := map[string]CommandSpec{
 		"HSET": {
-			minArgs: 3,
-			maxArgs: -1,
+			arity:   -3,
 			flags:   CmdWrite,
 			handler: HSet,
 		},
 
-		"HDEL": {minArgs: 2,
-			maxArgs: -1,
+		"HDEL": {
+			arity:   2,
 			flags:   CmdWrite,
 			handler: HDel},
 		"HGETALL": {
-			minArgs: 1,
-			maxArgs: 1,
+			arity:   1,
 			flags:   CmdRead,
 			handler: HGetAll,
 		},
-		"HEXISTS": {minArgs: 2,
-			maxArgs: 2,
+		"HEXISTS": {
+			arity:   2,
 			flags:   CmdRead,
-			handler: HExists},
+			handler: HExists,
+		},
 	}
-
-	sh.registerCommandSpecs(hSpecs)
 
 	for k, v := range hSpecs {
 		v.group = HashGroup
 		v.name = k
 		hSpecs[k] = v
 	}
+	sh.registerCommandSpecs(hSpecs)
 
 }
 
 func newHashRObject() *RedisObject {
 	return &RedisObject{
 		typ:      HashObject,
-		encoding: EncodingMap,
-		ptr:      map[string]string{},
+		encoding: EncodingHashMap,
+		ptr:      hashMapPayload(map[string]string{}),
 	}
 }
 
@@ -52,8 +50,8 @@ func hashObjValue(obj *RedisObject) (map[string]string, error) {
 	}
 
 	switch obj.encoding {
-	case EncodingMap:
-		val, ok := obj.ptr.(map[string]string)
+	case EncodingHashMap:
+		val, ok := obj.ptr.(hashMapPayload)
 		if !ok {
 			return newMap, ErrInvalidEncoding
 		}
@@ -155,7 +153,7 @@ func HSet(c *Client, args []Value) CommandResult {
 		setCount += 1
 	}
 
-	obj.ptr = hashObj
+	obj.ptr = hashMapPayload(hashObj)
 
 	c.db.setKey(key, obj)
 	c.server.dirty += 1

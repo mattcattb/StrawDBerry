@@ -25,23 +25,19 @@ func (tx *Transacion) queueVal(val Value) {
 func registerTransactionSpec(cs *SpecHandler) {
 	txSpec := map[string]CommandSpec{
 		"EXEC": {
-			name:    "EXEC",
-			minArgs: 1,
-			maxArgs: 1,
+			arity:   0,
 			handler: Exec,
 			group:   TxGroup,
 		},
 		"MULTI": {
-			name:    "MULTI",
-			minArgs: 1,
-			maxArgs: 1,
+			arity:   0,
 			group:   TxGroup,
 			handler: Multi,
 		},
-		"Discard": {
-			name:    "DISCARD",
-			minArgs: 1,
-			maxArgs: 1,
+		"DISCARD": {
+			arity:   0,
+			group:   TxGroup,
+			handler: Discard,
 		},
 	}
 	cs.registerCommandSpecs(txSpec)

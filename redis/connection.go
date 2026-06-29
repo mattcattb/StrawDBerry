@@ -3,13 +3,11 @@ package redis
 func registerConnectionCommands(ch *SpecHandler) {
 	ch.registerCommandSpecs(map[string]CommandSpec{
 		"PING": {
-			minArgs: 0,
-			maxArgs: 1,
+			arity:   0,
 			handler: Ping,
 			group:   ConnGroup,
 		}, "ECHO": {
-			minArgs: 1,
-			maxArgs: 1,
+			arity:   1,
 			handler: Echo,
 			group:   ConnGroup,
 		},
@@ -17,6 +15,10 @@ func registerConnectionCommands(ch *SpecHandler) {
 }
 
 func Ping(c *CommandContext, args []Value) CommandResult {
+	if len(args) > 1 {
+		return Failed(wrongArgs("PING"))
+	}
+
 	if len(args) == 0 {
 		return Result(SimpleString("pong"))
 	}

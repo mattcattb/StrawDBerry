@@ -8,33 +8,29 @@ func registerGenericCommands(sh *SpecHandler) {
 	sh.registerCommandSpecs(map[string]CommandSpec{
 		"EXISTS": {
 			handler: Exists,
-			minArgs: 1,
-			maxArgs: -1,
+			arity:   -1,
 			group:   GenericGroup,
 			flags:   CmdRead,
 		},
 		"TYPE": {
-			minArgs: 1,
-			maxArgs: 1,
+			arity:   1,
 			group:   GenericGroup,
 			flags:   CmdRead,
 			handler: Type,
 		},
 		"TTL": {
-			minArgs: 1,
-			maxArgs: 1,
+			arity:   1,
 			group:   GenericGroup,
 			flags:   CmdWrite,
 			handler: Ttl,
 		},
 		"DEL": {
-			minArgs: 1,
-			maxArgs: -1,
+			arity:   -1,
 			group:   GenericGroup,
 			flags:   CmdWrite,
 			handler: Del,
 		},
-		"COPY": {handler: Copy, minArgs: 2, group: GenericGroup, flags: CmdWrite},
+		"COPY": {handler: Copy, arity: 2, group: GenericGroup, flags: CmdWrite},
 	})
 
 }

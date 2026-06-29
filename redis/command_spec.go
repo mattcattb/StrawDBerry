@@ -35,14 +35,14 @@ const (
 
 type CommandSpec struct {
 	name    string
-	minArgs int
-	maxArgs int
+	arity   int // + is exact, negative is min
 	handler func(*Client, []Value) CommandResult
 	group   CommandGroup
 	flags   CommandFlags
 }
 
 func (sh *SpecHandler) registerCommand(name string, spec CommandSpec) {
+	spec.name = name
 	sh.commandMap[name] = spec
 }
 
@@ -53,6 +53,7 @@ func (f CommandFlags) has(flag CommandFlags) bool {
 func (sh *SpecHandler) registerCommandSpecs(specMap map[string]CommandSpec) {
 
 	for name, spec := range specMap {
+		spec.name = name
 		sh.commandMap[name] = spec
 	}
 
@@ -71,13 +72,23 @@ func (sh *SpecHandler) getCommandSpec(command string) (CommandSpec, bool) {
 }
 
 func validateCommandArity(spec CommandSpec, command string, args []Value) error {
-	minArgs, maxArgs := spec.minArgs, spec.maxArgs
+	// Positive is exact, negative is minimum, zero means handler validates.
+	arity := spec.arity
+	if arity == 0 {
+		return nil
+	}
 
-	if minArgs > 0 && len(args) < minArgs {
+	exact := !(arity < 0)
+
+	argCount := len(args)
+	if exact && arity != argCount {
+		// exact arity check
 		return ErrWrongArgs
 	}
 
-	if maxArgs >= 0 && len(args) > maxArgs {
+	// less than
+	if !exact && argCount < -1*arity {
+		// minimum args is arity
 		return ErrWrongArgs
 	}
 
