@@ -6,9 +6,12 @@ import (
 )
 
 type RedisDb struct {
-	mu sync.RWMutex
-
+	mu   sync.RWMutex
 	dict map[string]*RedisObject
+} // todo: versions
+
+func NewDb() *RedisDb {
+	return &RedisDb{dict: map[string]*RedisObject{}}
 }
 
 func (db *RedisDb) lookupKey(key string) (*RedisObject, bool) {

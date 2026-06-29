@@ -1,4 +1,4 @@
-package resp
+package redis
 
 type valueType byte
 

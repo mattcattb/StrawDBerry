@@ -1,189 +1,137 @@
 package redis
 
-import (
-	"errors"
-	"go-redis/resp"
+type SpecHandler struct {
+	commandMap map[string]CommandSpec
+}
+
+func NewSH() *SpecHandler {
+	return &SpecHandler{commandMap: make(map[string]CommandSpec)}
+}
+
+type CommandGroup string
+
+const (
+	StringGroup  CommandGroup = "string"
+	ConnGroup    CommandGroup = "connection"
+	HashGroup    CommandGroup = "hash"
+	SetGroup     CommandGroup = "set"
+	ExpiryGroup  CommandGroup = "expiry"
+	GenericGroup CommandGroup = "generic"
+	TxGroup      CommandGroup = "transaction"
+	PubsubGroup  CommandGroup = "pubsub"
 )
 
-var errWrongArgs = errors.New("wrong number of arguments")
+type CommandFlags uint32
 
-func parseSpec(spec commandSpec, args []resp.Value) error {
+const (
+	CmdRead CommandFlags = 1 << iota
+	CmdWrite
+	CmdPubSubOnly // pubsub command (sub or )
+	CmdBlocking   //
+	CmdAdmin      // Restricts the command from regular users (primarily internal usage)
+	CmdNoScript   // cannot be ran in lua script
+	CmdNoMulti    // command cannot be run inside a transaction
+)
+
+type CommandSpec struct {
+	name    string
+	minArgs int
+	maxArgs int
+	handler func(*Client, []Value) CommandResult
+	group   CommandGroup
+	flags   CommandFlags
+}
+
+func (sh *SpecHandler) registerCommand(name string, spec CommandSpec) {
+	sh.commandMap[name] = spec
+}
+
+func (f CommandFlags) has(flag CommandFlags) bool {
+	return f&flag != 0
+}
+
+func (sh *SpecHandler) registerCommandSpecs(specMap map[string]CommandSpec) {
+
+	for name, spec := range specMap {
+		sh.commandMap[name] = spec
+	}
+
+}
+
+func (sh *SpecHandler) getCommandSpec(command string) (CommandSpec, bool) {
+
+	spec, exists := sh.commandMap[command]
+
+	if !exists {
+		return CommandSpec{}, false
+	}
+
+	return spec, true
+
+}
+
+func validateCommandArity(spec CommandSpec, command string, args []Value) error {
 	minArgs, maxArgs := spec.minArgs, spec.maxArgs
 
 	if minArgs > 0 && len(args) < minArgs {
-		return errWrongArgs
+		return ErrWrongArgs
 	}
 
 	if maxArgs >= 0 && len(args) > maxArgs {
-		return errWrongArgs
+		return ErrWrongArgs
 	}
 
 	return nil
 }
 
-func parseBulkRespStringCommands(args []resp.Value) ([]string, error) {
-	// parse all args into a string array
+func validateCommandMode(client *Client, spec CommandSpec) error {
+	//! needs shaping up
 
-	stringArgs := make([]string, len(args))
-
-	for i := 0; i < len(args); i += 1 {
-		strVal, ok := args[i].BulkString()
-		if !ok {
-			return stringArgs, ErrWrongType
-		}
-		stringArgs[i] = strVal
+	if client.mode == ModeBlocking && spec.flags.has(CmdBlocking) {
+		// if mode blocking and not blocking flag
+		return ErrConnection
 	}
 
-	return stringArgs, nil
+	if client.mode == ModePubsub && !spec.flags.has(CmdPubSubOnly) {
+		// in pubsub andnot doing a pubsub allowed command
+		return ErrConnection
+	}
 
+	switch client.mode {
+	case ModeNormal:
+		// hmmm... hmmm
+		// pubsub requires being in a pubsub maybe?
+		if spec.flags.has(CmdPubSubOnly) {
+			return ErrConnection
+		}
+
+	case ModeTx:
+		// in transaction mode, should just queue this?
+		if spec.flags.has(CmdNoMulti) {
+			return ErrInternal
+		}
+
+		if spec.flags.has(CmdBlocking) {
+		}
+
+	case ModePubsub:
+		if !spec.flags.has(CmdPubSubOnly) {
+			// can only pubsub commands here
+			return ErrInternal
+		}
+	}
+
+	return nil
 }
 
-type commandHandler func(*CommandExecutor, []resp.Value) resp.Value
+func shouldQueuePipeline(c *Client, command string, spec CommandSpec) bool {
+	if c.tx.inMulti && spec.group != TxGroup {
+		return true
+	}
 
-type commandSpec struct {
-	minArgs int
-	maxArgs int
-	write   bool
-	handler commandHandler
+	return false
 }
 
-var handler = map[string]commandSpec{
-	"EXISTS": {
-		handler: (*CommandExecutor).Exists,
-		minArgs: 1,
-		maxArgs: -1,
-		write:   false,
-	},
-	"SET": {
-		minArgs: 2,
-		maxArgs: -1,
-		write:   true,
-		handler: (*CommandExecutor).Set,
-	},
-	"GET": {
-		minArgs: 1,
-		maxArgs: 1,
-		write:   false,
-		handler: (*CommandExecutor).Get,
-	},
-	"ECHO": {
-		minArgs: 1,
-		maxArgs: 1,
-		write:   false,
-		handler: (*CommandExecutor).Echo,
-	},
-	"TYPE": {
-		minArgs: 1,
-		maxArgs: 1,
-		write:   false,
-		handler: (*CommandExecutor).Type,
-	},
-	"TTL": {
-		minArgs: 1,
-		maxArgs: 1,
-		write:   false,
-		handler: (*CommandExecutor).Ttl,
-	},
-	"PING": {
-		minArgs: 0,
-		maxArgs: 1,
-		write:   false,
-		handler: (*CommandExecutor).Ping,
-	},
-	"DEL": {
-		minArgs: 1,
-		maxArgs: -1,
-		write:   true,
-		handler: (*CommandExecutor).Del,
-	},
-	"MGET": {
-		minArgs: 1,
-		maxArgs: -1,
-		write:   false,
-		handler: (*CommandExecutor).MGet,
-	},
-	"MSET": {
-		minArgs: 2,
-		maxArgs: -1,
-		write:   true,
-		handler: (*CommandExecutor).MSet,
-	},
-	"INCR": {
-		minArgs: 1,
-		maxArgs: 1,
-		write:   true,
-		handler: (*CommandExecutor).Incr,
-	},
-	"DECR": {
-		minArgs: 1,
-		maxArgs: 1,
-		write:   true,
-		handler: (*CommandExecutor).Decr,
-	},
-	"INCRBY": {
-		minArgs: 2,
-		maxArgs: 2,
-		write:   true,
-		handler: (*CommandExecutor).IncrBy,
-	},
-	"DECRBY": {
-		minArgs: 2,
-		maxArgs: 2,
-		write:   true,
-		handler: (*CommandExecutor).DecrBy,
-	},
-	"HGET": {
-		minArgs: 2,
-		maxArgs: 2,
-		write:   false,
-		handler: (*CommandExecutor).HGet,
-	},
-	"HSET": {
-		minArgs: 3,
-		maxArgs: -1,
-		write:   true,
-		handler: (*CommandExecutor).HSet,
-	},
-	"HDEL": {
-		minArgs: 2,
-		maxArgs: -1,
-		write:   true,
-		handler: (*CommandExecutor).HDel,
-	},
-	"HGETALL": {
-		minArgs: 1,
-		maxArgs: 1,
-		write:   false,
-		handler: (*CommandExecutor).HGetAll,
-	},
-	"HEXISTS": {
-		minArgs: 2,
-		maxArgs: 2,
-		write:   false,
-		handler: (*CommandExecutor).HExists,
-	},
-	"SADD": {
-		minArgs: 2,
-		maxArgs: -1,
-		write:   true,
-		handler: (*CommandExecutor).SAdd,
-	},
-	"SCARD": {
-		minArgs: 1,
-		maxArgs: 1,
-		write:   false,
-		handler: (*CommandExecutor).SCard,
-	},
-	"SREM": {
-		minArgs: 2,
-		maxArgs: -1,
-		write:   true,
-		handler: (*CommandExecutor).SRem,
-	},
-	"SISMEMBER": {
-		minArgs: 2,
-		maxArgs: 2,
-		write:   false,
-		handler: (*CommandExecutor).SIsMem,
-	},
+func shouldAppendAof(spec CommandSpec, dirtyBefore, dirtyAfter uint64) bool {
+	return spec.flags.has(CmdWrite) && dirtyAfter != dirtyBefore
 }

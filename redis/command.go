@@ -2,37 +2,47 @@ package redis
 
 import (
 	"errors"
-	"go-redis/resp"
 	"strings"
 )
 
-type appendLog interface {
-	Append(resp.Value) error
+type CommandResult struct {
+	Reply Value
+
+	Failed bool
 }
 
-type CommandExecutor struct {
-	db  *RedisDb
-	aof appendLog
+type CommandContext = Client
+
+func NewExec(db *RedisDb) *CommandContext {
+	return &CommandContext{db: db}
+}
+
+func Result(reply Value) CommandResult {
+	return CommandResult{Reply: reply}
+}
+
+func Failed(reply Value) CommandResult {
+	return CommandResult{Reply: reply, Failed: true}
 }
 
 // HMMM lets try to get structured commands here
+/*
+func Execute(e *CommandContext, v Value) (res CommandResult) {
 
-func (e *CommandExecutor) Execute(v resp.Value) resp.Value {
-
-	command, args, ok := parseCommand(v)
+	command, args, ok := ParseCommand(v)
 
 	if !ok {
-		return syntaxError()
+		return Failed(syntaxError())
 	}
 
-	spec, exists := handler[command]
+	spec, exists := c.
 
 	if !exists {
-		return unknownCommand(command)
+		return Failed(unknownCommand(command))
 	}
 
 	if err := parseSpec(spec, args); err != nil {
-		return wrongArgs(command)
+		return Failed(wrongArgs(command))
 	}
 
 	// for aof persistance
@@ -40,8 +50,9 @@ func (e *CommandExecutor) Execute(v resp.Value) resp.Value {
 
 	return spec.handler(e, args)
 }
+*/
 
-func parseCommand(v resp.Value) (string, []resp.Value, bool) {
+func ParseCommand(v Value) (string, []Value, bool) {
 	values, ok := v.Array()
 	if !ok || len(values) == 0 {
 		return "", nil, false
@@ -55,31 +66,31 @@ func parseCommand(v resp.Value) (string, []resp.Value, bool) {
 	return strings.ToUpper(commandName), values[1:], true
 }
 
-func wrongArgs(command string) resp.Value {
-	return resp.Error("ERR wrong number of arguments for '" + command + "' command")
+func wrongArgs(command string) Value {
+	return Error("ERR wrong number of arguments for '" + command + "' command")
 }
 
-func syntaxError() resp.Value {
-	return resp.Error("ERR syntax error")
+func syntaxError() Value {
+	return Error("ERR syntax error")
 }
 
-func invalidInteger() resp.Value {
-	return resp.Error("ERR value is not an integer or out of range")
+func invalidInteger() Value {
+	return Error("ERR value is not an integer or out of range")
 }
 
-func wrongTypeError() resp.Value {
-	return resp.Error("WRONGTYPE Operation against a key holding the wrong kind of value")
+func wrongTypeError() Value {
+	return Error("WRONGTYPE Operation against a key holding the wrong kind of value")
 }
 
-func unknownCommand(command string) resp.Value {
-	return resp.Error("ERR unknown command '" + command + "'")
+func unknownCommand(command string) Value {
+	return Error("ERR unknown command '" + command + "'")
 }
 
-func internalError() resp.Value {
-	return resp.Error("ERR internal server error")
+func internalError() Value {
+	return Error("ERR internal server error")
 }
 
-func mapRedisError(err error) resp.Value {
+func mapRedisError(err error) Value {
 
 	switch {
 	case errors.Is(err, ErrWrongType):
@@ -90,5 +101,22 @@ func mapRedisError(err error) resp.Value {
 	}
 
 	return internalError()
+
+}
+
+func parseBulkRespStringCommands(args []Value) ([]string, error) {
+	// parse all args into a string array
+
+	stringArgs := make([]string, len(args))
+
+	for i := 0; i < len(args); i += 1 {
+		strVal, ok := args[i].BulkString()
+		if !ok {
+			return stringArgs, ErrWrongType
+		}
+		stringArgs[i] = strVal
+	}
+
+	return stringArgs, nil
 
 }

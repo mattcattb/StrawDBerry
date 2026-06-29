@@ -2,11 +2,51 @@ package main
 
 import (
 	"fmt"
-	"go-redis/resp"
+	"go-redis/redis"
 	"net"
+	"time"
 )
 
+type ServerConfig struct {
+	Addr string
+}
+
+type Config struct {
+	aof    redis.AofConfig
+	server ServerConfig
+}
+
+func defaultConfig() Config {
+	return Config{
+		aof: redis.AofConfig{
+			DataDir:       "appendonly.aof",
+			FPolicy:       redis.FsAlways,
+			SnapshotEvery: time.Second,
+		},
+		server: ServerConfig{Addr: ":6379"},
+	}
+}
+
 func main() {
+
+	cfg := defaultConfig()
+	db := redis.NewDb()
+	exec := redis.NewExec(db)
+	aof, err := redis.OpenAof(cfg.aof)
+
+	if err != nil {
+		// no aof here...
+		fmt.Printf(err.Error())
+		panic(err)
+	}
+
+	defer aof.Close()
+	sh := redis.NewSH()
+
+	srv := redis.NewServer(exec, aof, sh)
+	srv.RegisterAllCommandHandlers()
+	aof.ReplayAOF(redis.NewClient(nil, srv))
+
 	fmt.Println("Listening on port :6379")
 
 	// Create a new server
@@ -16,28 +56,15 @@ func main() {
 		return
 	}
 
-	// Listen for connections
-	conn, err := l.Accept()
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	defer conn.Close()
-
 	for {
-		resp := resp.NewResp(conn)
-		value, err := resp.Read()
-
+		// Listen for connections
+		conn, err := l.Accept()
 		if err != nil {
 			fmt.Println(err)
-			return
+			continue
 		}
 
-		fmt.Println(value)
-
-		// ignore request and send back a PONG
-		conn.Write([]byte("+OK\r\n"))
-
+		go srv.HandleConnection(conn)
 	}
+
 }

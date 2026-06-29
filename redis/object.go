@@ -1,7 +1,6 @@
 package redis
 
 import (
-	"errors"
 	"time"
 )
 
@@ -25,9 +24,6 @@ const (
 	EncodingIntSet
 	EncodingQuicklist
 )
-
-var ErrWrongType = errors.New("wrong type")
-var ErrInvalidEncoding = errors.New(("wrong encoding"))
 
 type RedisObject struct {
 	typ       ObjectType

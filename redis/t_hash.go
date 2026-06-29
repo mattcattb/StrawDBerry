@@ -1,6 +1,40 @@
 package redis
 
-import "go-redis/resp"
+func registerTHashCommandSpec(sh *SpecHandler) {
+
+	hSpecs := map[string]CommandSpec{
+		"HSET": {
+			minArgs: 3,
+			maxArgs: -1,
+			flags:   CmdWrite,
+			handler: HSet,
+		},
+
+		"HDEL": {minArgs: 2,
+			maxArgs: -1,
+			flags:   CmdWrite,
+			handler: HDel},
+		"HGETALL": {
+			minArgs: 1,
+			maxArgs: 1,
+			flags:   CmdRead,
+			handler: HGetAll,
+		},
+		"HEXISTS": {minArgs: 2,
+			maxArgs: 2,
+			flags:   CmdRead,
+			handler: HExists},
+	}
+
+	sh.registerCommandSpecs(hSpecs)
+
+	for k, v := range hSpecs {
+		v.group = HashGroup
+		v.name = k
+		hSpecs[k] = v
+	}
+
+}
 
 func newHashRObject() *RedisObject {
 	return &RedisObject{
@@ -46,64 +80,64 @@ func hashTypeDel(obj *RedisObject, fields ...string) (deleted int, err error) {
 
 } */
 
-func (ce *CommandExecutor) HGet(args []resp.Value) resp.Value {
+func HGet(c *Client, args []Value) CommandResult {
 	// HGET key field
-	// returns resp.Array field, value
+	// returns Array field, value
 	if len(args) != 2 {
-		return wrongArgs("hget")
+		return Failed(wrongArgs("hget"))
 	}
 	strArgs, err := parseBulkRespStringCommands(args)
 	if err != nil {
-		return wrongTypeError()
+		return Failed(wrongTypeError())
 	}
 
 	key, field := strArgs[0], strArgs[1]
 
-	ce.db.mu.Lock()
-	defer ce.db.mu.Unlock()
+	c.db.mu.Lock()
+	defer c.db.mu.Unlock()
 
-	obj, exists := ce.db.lookupKey(key)
+	obj, exists := c.db.lookupKey(key)
 
 	if !exists {
-		return resp.Null()
+		return Result(Null())
 	}
 
 	hash, err := hashObjValue(obj)
 	if err != nil {
-		return wrongTypeError()
+		return Failed(wrongTypeError())
 	}
 
 	val, exists := hash[field]
 	if !exists {
-		return resp.Null()
+		return Result(Null())
 	}
 
-	return resp.BulkString(val)
+	return Result(BulkString(val))
 
 }
 
-func (ce *CommandExecutor) HSet(args []resp.Value) resp.Value {
+func HSet(c *Client, args []Value) CommandResult {
 	// HSET key field value [field value ...]
 	// returns int of set fields
 
 	strArgs, err := parseBulkRespStringCommands(args)
 
 	if err != nil {
-		return wrongTypeError()
+		return Failed(wrongTypeError())
 	}
 
 	key := strArgs[0]
 	kvArray := strArgs[1:]
 
 	if len(kvArray) == 0 || len(kvArray)%2 != 0 {
-		return wrongArgs("HSET")
+		return Failed(wrongArgs("HSET"))
 	}
-	ce.db.mu.Lock()
-	defer ce.db.mu.Unlock()
+	c.db.mu.Lock()
+	defer c.db.mu.Unlock()
 
 	setCount := 0
 
-	obj, exists := ce.db.lookupKey(key)
+	obj, exists := c.db.lookupKey(key)
 
 	if !exists {
 		obj = newHashRObject()
@@ -111,41 +145,45 @@ func (ce *CommandExecutor) HSet(args []resp.Value) resp.Value {
 
 	hashObj, err := hashObjValue(obj)
 	if err != nil {
-		return wrongTypeError()
+		return Failed(wrongTypeError())
 	}
 
-	for i := 0; i < len(strArgs); i += 2 {
-		field, value := strArgs[i], strArgs[i+1]
+	for i := 0; i < len(kvArray); i += 2 {
+		field, value := kvArray[i], kvArray[i+1]
 
 		hashObj[field] = value
 		setCount += 1
 	}
 
-	return resp.Integer(setCount)
+	obj.ptr = hashObj
+
+	c.db.setKey(key, obj)
+	c.server.dirty += 1
+	return Result(Integer(setCount))
 
 }
 
-func (ce *CommandExecutor) HDel(args []resp.Value) resp.Value {
+func HDel(c *CommandContext, args []Value) CommandResult {
 	// key field [field ...]
 	strArgs, err := parseBulkRespStringCommands(args)
 	if err != nil || len(strArgs) < 2 {
-		return wrongArgs("HDel")
+		return Failed(wrongArgs("HDel"))
 	}
 	key, fieldValues := strArgs[0], strArgs[1:]
 
-	ce.db.mu.Lock()
-	defer ce.db.mu.Unlock()
+	c.db.mu.Lock()
+	defer c.db.mu.Unlock()
 
-	obj, exists := ce.db.lookupKey(key)
+	obj, exists := c.db.lookupKey(key)
 
 	if !exists {
-		return resp.Integer(0)
+		return Result(Integer(0))
 	}
 
 	hash, err := hashObjValue(obj)
 
 	if err != nil {
-		return resp.Integer(0)
+		return Failed(wrongTypeError())
 	}
 
 	delCount := 0
@@ -154,83 +192,85 @@ func (ce *CommandExecutor) HDel(args []resp.Value) resp.Value {
 		delCount += 1
 	}
 
-	return resp.Integer(delCount)
+	if delCount > 0 {
+		c.server.dirty += 1
+	}
+
+	return Result(Integer(delCount))
 
 }
-func (ce *CommandExecutor) HGetAll(args []resp.Value) resp.Value {
+func HGetAll(c *CommandContext, args []Value) CommandResult {
 	// HGETALL key
-	// returns resp.Array field, value
+	// returns Array field, value
 
 	//  a list of fields and their values, or an empty list when key does not exist
 
 	if len(args) != 1 {
-		return wrongArgs("hgetall")
+		return Failed(wrongArgs("hgetall"))
 	}
 
 	key, ok := args[0].BulkString()
 
 	if !ok {
-		return syntaxError()
+		return Failed(syntaxError())
 	}
 
-	ce.db.mu.Lock()
-	defer ce.db.mu.Unlock()
+	c.db.mu.Lock()
+	defer c.db.mu.Unlock()
 
-	obj, exists := ce.db.lookupKey(key)
+	obj, exists := c.db.lookupKey(key)
 
 	if !exists {
-		return resp.Array([]resp.Value{})
+		return Result(Array([]Value{}))
 	}
 
 	hash, err := hashObjValue(obj)
 	if err != nil {
-		return wrongTypeError()
+		return Failed(wrongTypeError())
 	}
 
-	returnValues := make([]resp.Value, 0)
+	returnValues := make([]Value, 0)
 
-	for _, k := range hash {
-		val, _ := hash[k]
-
-		returnValues = append(returnValues, resp.BulkString(val))
+	for field, val := range hash {
+		returnValues = append(returnValues, BulkString(field), BulkString(val))
 	}
 
-	return resp.Array(returnValues)
+	return Result(Array(returnValues))
 
 }
 
-func (ce *CommandExecutor) HExists(args []resp.Value) resp.Value {
+func HExists(c *CommandContext, args []Value) CommandResult {
 	// HEXISTS key field
 
 	if len(args) != 2 {
-		return wrongArgs("hexists")
+		return Failed(wrongArgs("hexists"))
 	}
 
 	strArgs, err := parseBulkRespStringCommands(args)
 	if err != nil {
-		return wrongTypeError()
+		return Failed(wrongTypeError())
 	}
 
 	key, field := strArgs[0], strArgs[1]
 
-	obj, exists := ce.db.lookupKey(key)
+	obj, exists := c.db.lookupKey(key)
 
 	if !exists {
-		return resp.Integer(0)
+		return Result(Integer(0))
 	}
 
 	hash, err := hashObjValue(obj)
 
 	if err != nil {
-		return wrongTypeError()
+		return Failed(wrongTypeError())
 	}
 
 	_, exists = hash[field]
 
 	if exists {
-		return resp.Integer(1)
+		return Result(Integer(1))
 	}
 
-	return resp.Integer(0)
+	return Result(Integer(0))
 
 }
