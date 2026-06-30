@@ -1,6 +1,9 @@
 package redis
 
-import "net"
+import (
+	"net"
+	"sync"
+)
 
 type ClientMode uint8
 
@@ -9,10 +12,16 @@ const (
 	ModeTx
 	ModeBlocking
 	ModePubsub
+	ModeClosing
 )
 
 type PersistanceLog interface {
 	Append(v Value) error
+}
+
+type ClientConfig struct {
+	rBuf int
+	wBuf int
 }
 
 type Client struct {
@@ -25,10 +34,29 @@ type Client struct {
 	db     *RedisDb
 	aof    PersistanceLog
 	mode   ClientMode
+
+	repliesBuff chan Value
+	wmu         sync.Mutex
 }
 
 func NewClient(conn net.Conn, server *Server) *Client {
 	return &Client{server: server, conn: conn, reader: NewResp(conn), writer: NewWriter(conn), tx: &Transacion{}, db: server.db, aof: server.aof, mode: ModeNormal}
+}
+
+func (c *Client) startWriter() {
+	go func() {
+
+		for wval := range c.repliesBuff {
+			// write this
+
+			err := c.writer.Write(wval)
+
+			if err != nil {
+				// uhhh exit and throw? hmm
+			}
+		}
+
+	}()
 }
 
 func (c *Client) ListenToPublishing(bufSize int) {

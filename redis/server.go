@@ -39,22 +39,24 @@ func (s *Server) HandleConnection(conn net.Conn) {
 	client := &Client{server: s, conn: conn, reader: NewResp(conn), writer: NewWriter(conn), tx: &Transacion{}, db: s.db, aof: s.aof}
 
 	s.clients = append(s.clients, client)
-
+	client.repliesBuff = make(chan Value)
 	client.ListenToPublishing(0)
 
 	defer client.Disconnect()
 
+	client.startWriter()
 	for {
+
 		req, err := client.reader.Read()
+
 		if err != nil {
-			return
+			break
 		}
 
-		result := client.HandleCommand(req)
+		// read value here now
+		cres := client.HandleCommand(req)
 
-		if err := client.writer.Write(result.Reply); err != nil {
-			return
-		}
-
+		client.repliesBuff <- cres.Reply
 	}
+
 }

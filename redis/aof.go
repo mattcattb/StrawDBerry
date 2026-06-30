@@ -135,4 +135,4 @@ func (a *Aof) ReplayAOF(executor *Client) error {
 type DummyAofLog struct {
 }
 
-func (a *DummyAofLog) Append(v Value) error
+func (a *DummyAofLog) Append(v Value) error { return nil }

@@ -23,7 +23,7 @@ func defaultConfig() Config {
 			FPolicy:       redis.FsAlways,
 			SnapshotEvery: time.Second,
 		},
-		server: ServerConfig{Addr: ":6379"},
+		server: ServerConfig{Addr: ":6479"},
 	}
 }
 
