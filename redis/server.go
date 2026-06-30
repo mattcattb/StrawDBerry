@@ -6,16 +6,18 @@ import (
 
 type Server struct {
 	clients []*Client
-	exec    *CommandContext
-	pubsub  *PubSub
+	ps      *PubSubServer
 	aof     *Aof
+	db      *RedisDb
 	sh      *SpecHandler
 	dirty   uint64
 }
 
-func NewServer(exec *CommandContext, aof *Aof, sh *SpecHandler) *Server {
+func NewServer(db *RedisDb, aof *Aof, sh *SpecHandler) *Server {
 
-	return &Server{exec: exec, aof: aof, sh: sh}
+	ps := &PubSubServer{}
+
+	return &Server{aof: aof, sh: sh, ps: ps, db: db}
 
 }
 
@@ -34,22 +36,23 @@ func (s *Server) RegisterAllCommandHandlers() {
 func (s *Server) HandleConnection(conn net.Conn) {
 	defer conn.Close()
 
-	client := &Client{server: s, conn: conn, reader: NewResp(conn), writer: NewWriter(conn), tx: &Transacion{}, db: s.exec.db, aof: s.aof}
+	client := &Client{server: s, conn: conn, reader: NewResp(conn), writer: NewWriter(conn), tx: &Transacion{}, db: s.db, aof: s.aof}
 
 	s.clients = append(s.clients, client)
 
-	client.ListenToPublishing()
+	client.ListenToPublishing(0)
+
+	defer client.Disconnect()
+
 	for {
 		req, err := client.reader.Read()
 		if err != nil {
-			client.CloseListener()
 			return
 		}
 
 		result := client.HandleCommand(req)
 
 		if err := client.writer.Write(result.Reply); err != nil {
-			client.CloseListener()
 			return
 		}
 

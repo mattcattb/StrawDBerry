@@ -37,11 +37,11 @@ func registerGenericCommands(sh *SpecHandler) {
 
 // OBJECT ENCODING
 
-func Copy(c *CommandContext, args []Value) CommandResult {
+func Copy(c *Client, args []Value) CommandResult {
 	return Failed(Error("ERR not implemented"))
 }
 
-func Exists(c *CommandContext, args []Value) CommandResult {
+func Exists(c *Client, args []Value) CommandResult {
 	existsKeys := make([]string, len(args))
 
 	for i := 0; i < len(args); i += 1 {
@@ -66,11 +66,11 @@ func Exists(c *CommandContext, args []Value) CommandResult {
 
 }
 
-func Expire(c *CommandContext, args []Value) CommandResult {
+func Expire(c *Client, args []Value) CommandResult {
 	return Failed(Error("ERR not implemented"))
 }
 
-func Ttl(c *CommandContext, args []Value) CommandResult {
+func Ttl(c *Client, args []Value) CommandResult {
 
 	/*
 		Integer reply: TTL in seconds.
@@ -103,7 +103,7 @@ func Ttl(c *CommandContext, args []Value) CommandResult {
 	return Result(Integer(seconds))
 }
 
-func Del(c *CommandContext, args []Value) CommandResult {
+func Del(c *Client, args []Value) CommandResult {
 	delKeys := make([]string, len(args))
 
 	for i := 0; i < len(args); i += 1 {
@@ -134,7 +134,7 @@ func Del(c *CommandContext, args []Value) CommandResult {
 }
 
 // string, list, set, zset, hash, stream, and vectorset.
-func Type(c *CommandContext, args []Value) CommandResult {
+func Type(c *Client, args []Value) CommandResult {
 	key, ok := args[0].BulkString()
 
 	if !ok {

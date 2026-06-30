@@ -28,19 +28,34 @@ type Client struct {
 }
 
 func NewClient(conn net.Conn, server *Server) *Client {
-	return &Client{server: server, conn: conn, reader: NewResp(conn), writer: NewWriter(conn), tx: &Transacion{}, db: server.exec.db, aof: server.aof, mode: ModeNormal}
+	return &Client{server: server, conn: conn, reader: NewResp(conn), writer: NewWriter(conn), tx: &Transacion{}, db: server.db, aof: server.aof, mode: ModeNormal}
 }
 
-func (c *Client) ListenToPublishing() {
+func (c *Client) ListenToPublishing(bufSize int) {
+
+	c.out = make(chan Value, bufSize)
+
 	go func() {
+		// add check if blocking, do not do anything
 		for outVal := range c.out {
 			c.writer.Write(outVal)
 		}
 	}()
+
 }
 
-func (c *Client) CloseListener() {
+func (c *Client) Disconnect() {
+
+	// close pubsub and disconnect client
 	close(c.out)
+	c.server.ps.disconnClient(c)
+
+}
+
+func (c *Client) Send(val Value) bool {
+	c.out <- val
+
+	return true
 }
 
 /*
@@ -48,6 +63,7 @@ handle command VS replay AOF
 
 BLOCKING COMMAND FLAG: switch to blocking mode
 */
+
 func (c *Client) HandleCommand(req Value) CommandResult {
 
 	/*

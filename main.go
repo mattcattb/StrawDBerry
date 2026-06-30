@@ -31,7 +31,6 @@ func main() {
 
 	cfg := defaultConfig()
 	db := redis.NewDb()
-	exec := redis.NewExec(db)
 	aof, err := redis.OpenAof(cfg.aof)
 
 	if err != nil {
@@ -43,14 +42,15 @@ func main() {
 	defer aof.Close()
 	sh := redis.NewSH()
 
-	srv := redis.NewServer(exec, aof, sh)
+	srv := redis.NewServer(db, aof, sh)
 	srv.RegisterAllCommandHandlers()
 	aof.ReplayAOF(redis.NewClient(nil, srv))
 
-	fmt.Println("Listening on port :6379")
+	fmt.Println("Listening on port ", cfg.server.Addr)
 
 	// Create a new server
-	l, err := net.Listen("tcp", ":6379")
+	l, err := net.Listen("tcp", cfg.server.Addr)
+
 	if err != nil {
 		fmt.Println(err)
 		return

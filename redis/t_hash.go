@@ -161,7 +161,7 @@ func HSet(c *Client, args []Value) CommandResult {
 
 }
 
-func HDel(c *CommandContext, args []Value) CommandResult {
+func HDel(c *Client, args []Value) CommandResult {
 	// key field [field ...]
 	strArgs, err := parseBulkRespStringCommands(args)
 	if err != nil || len(strArgs) < 2 {
@@ -200,7 +200,7 @@ func HDel(c *CommandContext, args []Value) CommandResult {
 	return Result(Integer(delCount))
 
 }
-func HGetAll(c *CommandContext, args []Value) CommandResult {
+func HGetAll(c *Client, args []Value) CommandResult {
 	// HGETALL key
 	// returns Array field, value
 
@@ -240,7 +240,7 @@ func HGetAll(c *CommandContext, args []Value) CommandResult {
 
 }
 
-func HExists(c *CommandContext, args []Value) CommandResult {
+func HExists(c *Client, args []Value) CommandResult {
 	// HEXISTS key field
 
 	if len(args) != 2 {

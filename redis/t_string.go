@@ -126,7 +126,7 @@ func setStringObjectValue(obj *RedisObject, value string) {
 	obj.ptr = rawStringPayload(value)
 }
 
-func Set(c *CommandContext, args []Value) CommandResult {
+func Set(c *Client, args []Value) CommandResult {
 	key, ok := args[0].BulkString()
 	if !ok {
 		return Failed(syntaxError())
@@ -238,7 +238,7 @@ func Set(c *CommandContext, args []Value) CommandResult {
 
 }
 
-func Get(c *CommandContext, args []Value) CommandResult {
+func Get(c *Client, args []Value) CommandResult {
 
 	if len(args) != 1 {
 		return Failed(wrongArgs("get"))
@@ -267,7 +267,7 @@ func Get(c *CommandContext, args []Value) CommandResult {
 	return Result(BulkString(val))
 }
 
-func Incr(c *CommandContext, args []Value) CommandResult {
+func Incr(c *Client, args []Value) CommandResult {
 
 	if len(args) != 1 {
 		return Failed(wrongArgs("incr"))
@@ -288,7 +288,7 @@ func Incr(c *CommandContext, args []Value) CommandResult {
 	return Result(Integer(finalVal))
 }
 
-func Decr(c *CommandContext, args []Value) CommandResult {
+func Decr(c *Client, args []Value) CommandResult {
 	if len(args) != 1 {
 		return Failed(wrongArgs("decr"))
 	}
@@ -308,7 +308,7 @@ func Decr(c *CommandContext, args []Value) CommandResult {
 	return Result(Integer(finalVal))
 }
 
-func DecrBy(c *CommandContext, args []Value) CommandResult {
+func DecrBy(c *Client, args []Value) CommandResult {
 
 	if len(args) != 2 {
 		return Failed(wrongArgs("decrby"))
@@ -342,7 +342,7 @@ func DecrBy(c *CommandContext, args []Value) CommandResult {
 	return Result(Integer(n))
 }
 
-func IncrBy(c *CommandContext, args []Value) CommandResult {
+func IncrBy(c *Client, args []Value) CommandResult {
 	if len(args) != 2 {
 		return Failed(wrongArgs("incrby"))
 	}
@@ -375,7 +375,7 @@ func IncrBy(c *CommandContext, args []Value) CommandResult {
 	return Result(Integer(n))
 }
 
-func deltaStrValue(c *CommandContext, key string, delta int) (int, error) {
+func deltaStrValue(c *Client, key string, delta int) (int, error) {
 	// add/subtract value from here
 	c.db.mu.Lock()
 	defer c.db.mu.Unlock()
@@ -407,7 +407,7 @@ func deltaStrValue(c *CommandContext, key string, delta int) (int, error) {
 	return value, nil
 }
 
-func MGet(c *CommandContext, args []Value) CommandResult {
+func MGet(c *Client, args []Value) CommandResult {
 	if len(args) < 1 {
 		return Failed(wrongArgs("mget"))
 	}
@@ -439,7 +439,7 @@ func MGet(c *CommandContext, args []Value) CommandResult {
 
 }
 
-func MSet(c *CommandContext, args []Value) CommandResult {
+func MSet(c *Client, args []Value) CommandResult {
 	// MSET key value [key value ...]
 
 	if len(args) < 2 {

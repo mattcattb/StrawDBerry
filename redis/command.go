@@ -10,12 +10,6 @@ type CommandResult struct {
 	Failed bool
 }
 
-type CommandContext = Client
-
-func NewExec(db *RedisDb) *CommandContext {
-	return &CommandContext{db: db}
-}
-
 func Result(reply Value) CommandResult {
 	return CommandResult{Reply: reply}
 }
@@ -23,33 +17,6 @@ func Result(reply Value) CommandResult {
 func Failed(reply Value) CommandResult {
 	return CommandResult{Reply: reply, Failed: true}
 }
-
-// HMMM lets try to get structured commands here
-/*
-func Execute(e *CommandContext, v Value) (res CommandResult) {
-
-	command, args, ok := ParseCommand(v)
-
-	if !ok {
-		return Failed(syntaxError())
-	}
-
-	spec, exists := c.
-
-	if !exists {
-		return Failed(unknownCommand(command))
-	}
-
-	if err := parseSpec(spec, args); err != nil {
-		return Failed(wrongArgs(command))
-	}
-
-	// for aof persistance
-	// writes := spec.write
-
-	return spec.handler(e, args)
-}
-*/
 
 func ParseCommand(v Value) (string, []Value, bool) {
 	values, ok := v.Array()

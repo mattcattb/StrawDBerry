@@ -4,12 +4,13 @@ import (
 	"sync"
 )
 
-type PubSub struct {
+type PubSubServer struct {
 	channels  map[string]map[*Client]struct{}
 	connCount map[*Client]int
 	mu        *sync.Mutex
 }
 
+// client pointer vs... hmmm
 func registerPubsubCommands(sh *SpecHandler) {
 	pubsubRegistry := map[string]CommandSpec{
 		"SUBSCRIBE": {
@@ -33,7 +34,16 @@ func registerPubsubCommands(sh *SpecHandler) {
 	sh.registerCommandSpecs(pubsubRegistry)
 }
 
-func (ps *PubSub) sub(client *Client, channel string) int {
+func (ps *PubSubServer) disconnClient(client *Client) int {
+	c := 0
+	for ch, _ := range ps.channels {
+		c += ps.unsub(ch, client)
+	}
+
+	return c
+}
+
+func (ps *PubSubServer) sub(client *Client, channel string) int {
 	// For instance, to subscribe to channels "channel11" and "ch:00" the client issues a SUBSCRIBE providing the names of the channels:
 	// SUBSCRIBE channel11 ch:00
 
@@ -66,7 +76,7 @@ func (ps *PubSub) sub(client *Client, channel string) int {
 
 }
 
-func (ps *PubSub) getSubed(channel string) (conClients []*Client) {
+func (ps *PubSubServer) getSubed(channel string) (conClients []*Client) {
 	clients, chExists := ps.channels[channel]
 
 	if !chExists {
@@ -79,7 +89,7 @@ func (ps *PubSub) getSubed(channel string) (conClients []*Client) {
 	return conClients
 }
 
-func (ps *PubSub) unsub(channel string, client *Client) int {
+func (ps *PubSubServer) unsub(channel string, client *Client) int {
 
 	// means that we successfully unsubscribed from the channel given as second element in the reply.
 	//  The third argument represents the number of channels we are currently subscribed to. When the last argument is zero,
@@ -122,7 +132,7 @@ func Subscribe(c *Client, args []Value) CommandResult {
 	}
 	channel := channels[0]
 	c.mode = ModePubsub
-	n := c.server.pubsub.sub(c, channel)
+	n := c.server.ps.sub(c, channel)
 	return Result(Array([]Value{BulkString("subscribe"), BulkString(channel), Integer(n)}))
 }
 
@@ -135,7 +145,7 @@ func Unsubscribe(c *Client, args []Value) CommandResult {
 
 	unsubChannel := channels[0]
 
-	n := c.server.pubsub.unsub(unsubChannel, c)
+	n := c.server.ps.unsub(unsubChannel, c)
 	if n == 0 {
 		// no longer normal mode
 		c.mode = ModeNormal
@@ -154,12 +164,11 @@ func Publish(c *Client, args []Value) CommandResult {
 	}
 	channel, message := vals[0], vals[1]
 
-	clients := c.server.pubsub.getSubed(channel)
+	clients := c.server.ps.getSubed(channel)
 
 	for _, targetClient := range clients {
-
 		sendMessage := Array([]Value{BulkString("message"), BulkString(channel), BulkString(message)})
-		targetClient.out <- sendMessage
+		targetClient.Send(sendMessage)
 	}
 
 	return Result(Integer(len(clients)))

@@ -103,7 +103,7 @@ func setTypeDel(obj *RedisObject, member string) (bool, error) {
 	return exists, nil
 }
 
-func SAdd(c *CommandContext, args []Value) CommandResult {
+func SAdd(c *Client, args []Value) CommandResult {
 
 	strVals, err := parseBulkRespStringCommands(args)
 
@@ -133,7 +133,7 @@ func SAdd(c *CommandContext, args []Value) CommandResult {
 	return CommandResult{Reply: Integer(added)}
 }
 
-func SCard(c *CommandContext, args []Value) CommandResult {
+func SCard(c *Client, args []Value) CommandResult {
 	// Returns the set cardinality (number of elements) of the set stored at key.
 
 	strVals, err := parseBulkRespStringCommands(args)
@@ -161,10 +161,10 @@ func SCard(c *CommandContext, args []Value) CommandResult {
 	return Result(Integer(len(m)))
 }
 
-func SRem(c *CommandContext, args []Value) CommandResult {
+func SRem(c *Client, args []Value) CommandResult {
 	return Failed(Error("ERR not implemented"))
 }
 
-func SIsMem(c *CommandContext, args []Value) CommandResult {
+func SIsMem(c *Client, args []Value) CommandResult {
 	return Failed(Error("ERR not implemented"))
 }

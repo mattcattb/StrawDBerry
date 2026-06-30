@@ -4,7 +4,7 @@ import "testing"
 
 func newStringCommandTestClient() *Client {
 	db := NewDb()
-	server := NewServer(NewExec(db), nil, NewSH())
+	server := NewServer(db, nil, NewSH())
 
 	return &Client{
 		server: server,
