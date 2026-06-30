@@ -26,11 +26,11 @@ type CommandFlags uint32
 const (
 	CmdRead CommandFlags = 1 << iota
 	CmdWrite
-	CmdPubSubOnly // pubsub command (sub or )
-	CmdBlocking   //
-	CmdAdmin      // Restricts the command from regular users (primarily internal usage)
-	CmdNoScript   // cannot be ran in lua script
-	CmdNoMulti    // command cannot be run inside a transaction
+	CmdAllowedInPubsub // function can be done in a pubsub
+	CmdBlocking        //
+	CmdAdmin           // Restricts the command from regular users (primarily internal usage)
+	CmdNoScript        // cannot be ran in lua script
+	CmdNoMulti         // command cannot be run inside a transaction
 )
 
 type CommandSpec struct {
@@ -100,35 +100,34 @@ func validateCommandMode(client *Client, spec CommandSpec) error {
 
 	if client.mode == ModeBlocking && spec.flags.has(CmdBlocking) {
 		// if mode blocking and not blocking flag
-		return ErrConnection
-	}
-
-	if client.mode == ModePubsub && !spec.flags.has(CmdPubSubOnly) {
-		// in pubsub andnot doing a pubsub allowed command
-		return ErrConnection
+		return ErrInvalidState
 	}
 
 	switch client.mode {
 	case ModeNormal:
 		// hmmm... hmmm
 		// pubsub requires being in a pubsub maybe?
-		if spec.flags.has(CmdPubSubOnly) {
-			return ErrConnection
+		if spec.flags.has(CmdAllowedInPubsub) {
+			return ErrInvalidState
 		}
+
+	case ModeBlocking:
+		//! cannot do in blocking
+		return ErrInvalidState
 
 	case ModeTx:
 		// in transaction mode, should just queue this?
 		if spec.flags.has(CmdNoMulti) {
-			return ErrInternal
+			return ErrInvalidState
 		}
 
 		if spec.flags.has(CmdBlocking) {
 		}
 
 	case ModePubsub:
-		if !spec.flags.has(CmdPubSubOnly) {
-			// can only pubsub commands here
-			return ErrInternal
+		//! in pubsub and command NOT ALLOWED in pubsub
+		if !spec.flags.has(CmdAllowedInPubsub) {
+			return ErrInvalidState
 		}
 	}
 

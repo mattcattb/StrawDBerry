@@ -29,6 +29,8 @@ var ErrWrongArgs = errors.New("wrong number of arguments")
 var ErrUnknownCommand = errors.New("ERR unknown command")
 var ErrWrongType = errors.New("WRONGTYPE") // wrong object type
 
+var ErrInvalidState = errors.New("INVALID CLIENT STATE")
+
 // Data Serialization Errors
 var ErrJsonDecode = errors.New("JSONDecodeError")
 var ErrSerialization = errors.New("SerializationError")

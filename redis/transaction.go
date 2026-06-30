@@ -8,7 +8,8 @@ type Transacion struct {
 
 func (tx *Transacion) clearMulti() []Value {
 	tx.inMulti = false
-	vals := tx.queued
+	vals := make([]Value, len(tx.queued))
+	copy(vals, tx.queued)
 	tx.queued = make([]Value, 0)
 	return vals
 }
@@ -33,6 +34,7 @@ func registerTransactionSpec(cs *SpecHandler) {
 			arity:   0,
 			group:   TxGroup,
 			handler: Multi,
+			flags:   CmdNoMulti, // cannot call multi if in multi
 		},
 		"DISCARD": {
 			arity:   0,
@@ -45,6 +47,9 @@ func registerTransactionSpec(cs *SpecHandler) {
 
 func Exec(c *Client, args []Value) CommandResult {
 
+	if c.mode != ModeTx {
+		return Failed(invalidStateError())
+	}
 	queuedCommands := c.tx.clearMulti()
 	replies := make([]Value, len(queuedCommands))
 
@@ -60,13 +65,22 @@ func Exec(c *Client, args []Value) CommandResult {
 
 func Multi(c *Client, args []Value) CommandResult {
 
+	if c.mode == ModeTx {
+		// cannot do multi in state here
+		return Failed(invalidStateError())
+	}
 	// make mode multi mode?
 	c.tx.initMulti()
 
 	return Result(SimpleString("OK"))
 }
 
+// blocked commands if in multi just return the value themselves?
+
 func Discard(c *Client, args []Value) CommandResult {
+	if c.mode != ModeTx {
+		return Failed(invalidStateError())
+	}
 	c.tx.clearMulti()
 
 	return Result(SimpleString("OK"))

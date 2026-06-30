@@ -186,8 +186,11 @@ func HDel(c *CommandContext, args []Value) CommandResult {
 
 	delCount := 0
 	for _, delField := range fieldValues {
-		delete(hash, delField)
-		delCount += 1
+		_, exists := hash[delField]
+		if exists {
+			delete(hash, delField)
+			delCount += 1
+		}
 	}
 
 	if delCount > 0 {

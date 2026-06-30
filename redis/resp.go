@@ -109,7 +109,11 @@ func (r *Resp) readLine() (line []byte, n int, err error) {
 		n += 1
 		line = append(line, b)
 		if len(line) >= 2 && line[len(line)-2] == '\r' {
-			break
+			if line[len(line)-1] != '\n' {
+				break
+			}
+
+			return nil, 0, ErrJsonDecode
 		}
 	}
 	return line[:len(line)-2], n, nil

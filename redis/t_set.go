@@ -119,7 +119,7 @@ func SAdd(c *CommandContext, args []Value) CommandResult {
 	obj, exists := c.db.lookupKey(key)
 
 	if !exists {
-		obj = newHashRObject()
+		obj = newSetObj()
 		c.db.setKey(key, obj)
 	}
 

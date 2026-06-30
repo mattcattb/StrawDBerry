@@ -6,8 +6,7 @@ import (
 )
 
 type CommandResult struct {
-	Reply Value
-
+	Reply  Value
 	Failed bool
 }
 
@@ -80,6 +79,10 @@ func invalidInteger() Value {
 
 func wrongTypeError() Value {
 	return Error("WRONGTYPE Operation against a key holding the wrong kind of value")
+}
+
+func invalidStateError() Value {
+	return Error("INVALID STATE for current client mode")
 }
 
 func unknownCommand(command string) Value {

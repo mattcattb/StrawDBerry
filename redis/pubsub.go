@@ -1,6 +1,8 @@
 package redis
 
-import "sync"
+import (
+	"sync"
+)
 
 type PubSub struct {
 	channels  map[string]map[*Client]struct{}
@@ -12,14 +14,19 @@ func registerPubsubCommands(sh *SpecHandler) {
 	pubsubRegistry := map[string]CommandSpec{
 		"SUBSCRIBE": {
 			handler: Subscribe,
-			arity:   -1,
+			arity:   1,
 			group:   PubsubGroup,
-			flags:   CmdPubSubOnly,
+			flags:   CmdAllowedInPubsub & CmdNoMulti,
 		}, "UNSUBSCRIBE": {
 			handler: Unsubscribe,
-			arity:   -1,
+			arity:   1,
 			group:   PubsubGroup,
-			flags:   CmdPubSubOnly,
+			flags:   CmdAllowedInPubsub & CmdNoMulti,
+		},
+		"PUBLISH": {
+			handler: Publish,
+			arity:   2,
+			group:   PubsubGroup,
 		},
 	}
 
@@ -109,13 +116,51 @@ func (ps *PubSub) unsub(channel string, client *Client) int {
 }
 
 func Subscribe(c *Client, args []Value) CommandResult {
-	return Failed(Error("ERR not implemented"))
+	channels, err := parseBulkRespStringCommands(args)
+	if err != nil {
+		return Failed(wrongArgs("SUBSCRIBE"))
+	}
+	channel := channels[0]
+	c.mode = ModePubsub
+	n := c.server.pubsub.sub(c, channel)
+	return Result(Array([]Value{BulkString("subscribe"), BulkString(channel), Integer(n)}))
 }
 
 func Unsubscribe(c *Client, args []Value) CommandResult {
-	return Failed(Error("ERR not implemented"))
+	channels, err := parseBulkRespStringCommands(args)
+
+	if err != nil {
+		return Failed(wrongArgs("UNSUBSCRIBE"))
+	}
+
+	unsubChannel := channels[0]
+
+	n := c.server.pubsub.unsub(unsubChannel, c)
+	if n == 0 {
+		// no longer normal mode
+		c.mode = ModeNormal
+	}
+
+	return Result(Array([]Value{BulkString("unsubscribe"), BulkString(unsubChannel), Integer(n)}))
 }
 
 func Publish(c *Client, args []Value) CommandResult {
-	return Failed(Error("ERR not implemented"))
+
+	// number subscribers recieved message
+	vals, err := parseBulkRespStringCommands(args)
+
+	if err != nil {
+		return Failed(wrongArgs("PUBLISH"))
+	}
+	channel, message := vals[0], vals[1]
+
+	clients := c.server.pubsub.getSubed(channel)
+
+	for _, targetClient := range clients {
+
+		sendMessage := Array([]Value{BulkString("message"), BulkString(channel), BulkString(message)})
+		targetClient.out <- sendMessage
+	}
+
+	return Result(Integer(len(clients)))
 }

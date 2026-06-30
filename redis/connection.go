@@ -6,6 +6,7 @@ func registerConnectionCommands(ch *SpecHandler) {
 			arity:   0,
 			handler: Ping,
 			group:   ConnGroup,
+			flags:   CmdAllowedInPubsub,
 		}, "ECHO": {
 			arity:   1,
 			handler: Echo,

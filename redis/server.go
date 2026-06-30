@@ -38,15 +38,18 @@ func (s *Server) HandleConnection(conn net.Conn) {
 
 	s.clients = append(s.clients, client)
 
+	client.ListenToPublishing()
 	for {
 		req, err := client.reader.Read()
 		if err != nil {
+			client.CloseListener()
 			return
 		}
 
 		result := client.HandleCommand(req)
 
 		if err := client.writer.Write(result.Reply); err != nil {
+			client.CloseListener()
 			return
 		}
 

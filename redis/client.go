@@ -16,6 +16,7 @@ type PersistanceLog interface {
 }
 
 type Client struct {
+	out    chan Value
 	server *Server
 	conn   net.Conn
 	reader *Resp
@@ -28,6 +29,18 @@ type Client struct {
 
 func NewClient(conn net.Conn, server *Server) *Client {
 	return &Client{server: server, conn: conn, reader: NewResp(conn), writer: NewWriter(conn), tx: &Transacion{}, db: server.exec.db, aof: server.aof, mode: ModeNormal}
+}
+
+func (c *Client) ListenToPublishing() {
+	go func() {
+		for outVal := range c.out {
+			c.writer.Write(outVal)
+		}
+	}()
+}
+
+func (c *Client) CloseListener() {
+	close(c.out)
 }
 
 /*
@@ -63,7 +76,7 @@ func (c *Client) HandleCommand(req Value) CommandResult {
 	err = validateCommandMode(c, spec)
 
 	if err != nil {
-		return Failed(Error(err.Error()))
+		return Failed(invalidStateError())
 	}
 
 	// queue transaction depends on the mode
