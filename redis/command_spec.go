@@ -1,5 +1,7 @@
 package redis
 
+import "log"
+
 type SpecHandler struct {
 	commandMap map[string]CommandSpec
 }
@@ -27,7 +29,7 @@ const (
 	CmdRead CommandFlags = 1 << iota
 	CmdWrite
 	CmdAllowedInPubsub // function can be done in a pubsub
-	CmdBlocking        //
+	CmdBlocking        // command translates to blokcing mode
 	CmdAdmin           // Restricts the command from regular users (primarily internal usage)
 	CmdNoScript        // cannot be ran in lua script
 	CmdNoMulti         // command cannot be run inside a transaction
@@ -36,7 +38,7 @@ const (
 type CommandSpec struct {
 	name    string
 	arity   int // + is exact, negative is min
-	handler func(*Client, []Value) CommandResult
+	handler func(*Client, []string) CommandResult
 	group   CommandGroup
 	flags   CommandFlags
 }
@@ -71,7 +73,7 @@ func (sh *SpecHandler) getCommandSpec(command string) (CommandSpec, bool) {
 
 }
 
-func validateCommandArity(spec CommandSpec, command string, args []Value) error {
+func validateSpecArity(spec CommandSpec, command string, args []string) error {
 	// Positive is exact, negative is minimum, zero means handler validates.
 	arity := spec.arity
 	if arity == 0 {
@@ -83,12 +85,16 @@ func validateCommandArity(spec CommandSpec, command string, args []Value) error 
 	argCount := len(args)
 	if exact && arity != argCount {
 		// exact arity check
+		log.Printf("invalid exact arity: %v", argCount)
+
 		return ErrWrongArgs
 	}
 
 	// less than
 	if !exact && argCount < -1*arity {
 		// minimum args is arity
+		log.Printf("invalid arity LT: %v", argCount)
+
 		return ErrWrongArgs
 	}
 
@@ -107,9 +113,8 @@ func validateCommandMode(client *Client, spec CommandSpec) error {
 	case ModeNormal:
 		// hmmm... hmmm
 		// pubsub requires being in a pubsub maybe?
-		if spec.flags.has(CmdAllowedInPubsub) {
-			return ErrInvalidState
-		}
+
+		break
 
 	case ModeBlocking:
 		//! cannot do in blocking
@@ -123,6 +128,7 @@ func validateCommandMode(client *Client, spec CommandSpec) error {
 
 		if spec.flags.has(CmdBlocking) {
 		}
+		break
 
 	case ModePubsub:
 		//! in pubsub and command NOT ALLOWED in pubsub
@@ -135,7 +141,7 @@ func validateCommandMode(client *Client, spec CommandSpec) error {
 }
 
 func shouldQueuePipeline(c *Client, command string, spec CommandSpec) bool {
-	if c.tx.inMulti && spec.group != TxGroup {
+	if c.mode == ModeTx && spec.group != TxGroup && !spec.flags.has(CmdNoMulti) {
 		return true
 	}
 

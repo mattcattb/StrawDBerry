@@ -39,3 +39,49 @@ var ErrSerialization = errors.New("SerializationError")
 var ErrMemoryLimit = errors.New("ERRMemoryLimit")
 
 var ErrInternal = errors.New("InternalError")
+
+func wrongArgs(command string) Value {
+	return Error("ERR wrong number of arguments for '" + command + "' command")
+}
+
+func syntaxError() Value {
+	return Error("ERR syntax error")
+}
+
+func invalidInteger() Value {
+	return Error("ERR value is not an integer or out of range")
+}
+
+func wrongTypeError() Value {
+	return Error("WRONGTYPE Operation against a key holding the wrong kind of value")
+}
+
+func invalidStateError() Value {
+	return Error("INVALID STATE for current client mode")
+}
+
+func unknownCommand(command string) Value {
+	return Error("ERR unknown command '" + command + "'")
+}
+
+func internalError() Value {
+	return Error("ERR internal server error")
+}
+
+func mapRedisErrorToResp(err error) Value {
+
+	switch err {
+	case ErrWrongArgs:
+		return wrongTypeError()
+	}
+
+	switch {
+	case errors.Is(err, ErrWrongType):
+		return wrongTypeError()
+
+	case errors.Is(err, ErrInvalidEncoding):
+		return wrongTypeError()
+	}
+
+	return internalError()
+}

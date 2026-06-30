@@ -1,28 +1,5 @@
 package redis
 
-type Transacion struct {
-	inMulti bool
-	queued  []Value
-	dirty   bool
-}
-
-func (tx *Transacion) clearMulti() []Value {
-	tx.inMulti = false
-	vals := make([]Value, len(tx.queued))
-	copy(vals, tx.queued)
-	tx.queued = make([]Value, 0)
-	return vals
-}
-
-func (tx *Transacion) initMulti() {
-	tx.inMulti = true
-	tx.queued = make([]Value, 0)
-}
-
-func (tx *Transacion) queueVal(val Value) {
-	tx.queued = append(tx.queued, val)
-}
-
 func registerTransactionSpec(cs *SpecHandler) {
 	txSpec := map[string]CommandSpec{
 		"EXEC": {
@@ -45,47 +22,49 @@ func registerTransactionSpec(cs *SpecHandler) {
 	cs.registerCommandSpecs(txSpec)
 }
 
-func Exec(c *Client, args []Value) CommandResult {
+func Exec(c *Client, args []string) CommandResult {
 
 	if c.mode != ModeTx {
 		return Failed(invalidStateError())
 	}
-	queuedCommands := c.tx.clearMulti()
-	replies := make([]Value, len(queuedCommands))
+	c.mode = ModeNormal
+	replies := make([]Value, len(c.txQueue))
 
-	for i := 0; i < len(c.tx.queued); i += 1 {
-		result := c.HandleCommand(c.tx.queued[i])
+	for i, v := range c.txQueue {
+		result := c.HandleCommand(v)
 		replies[i] = result.Reply
 	}
 
-	c.tx.inMulti = false
-	c.tx.queued = []Value{}
+	c.txQueue = []Value{}
 	return Result(Array(replies))
 }
 
-func Multi(c *Client, args []Value) CommandResult {
+func Multi(c *Client, args []string) CommandResult {
 
 	if c.mode == ModeTx {
 		// cannot do multi in state here
 		return Failed(invalidStateError())
 	}
 	// make mode multi mode?
-	c.tx.initMulti()
+	c.mode = ModeTx
+	c.txQueue = make([]Value, 0)
 
 	return Result(SimpleString("OK"))
 }
 
 // blocked commands if in multi just return the value themselves?
 
-func Discard(c *Client, args []Value) CommandResult {
+func Discard(c *Client, args []string) CommandResult {
 	if c.mode != ModeTx {
+		// cannot discard if not in multi
 		return Failed(invalidStateError())
 	}
-	c.tx.clearMulti()
+	c.mode = ModeNormal
+	c.txQueue = make([]Value, 0)
 
 	return Result(SimpleString("OK"))
 }
 
-func Watch(c *Client, args []Value) CommandResult {
+func Watch(c *Client, args []string) CommandResult {
 	return Failed(Error("ERR not implemented"))
 }

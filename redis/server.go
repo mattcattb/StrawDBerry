@@ -1,6 +1,7 @@
 package redis
 
 import (
+	"log"
 	"net"
 )
 
@@ -34,9 +35,18 @@ func (s *Server) RegisterAllCommandHandlers() {
 }
 
 func (s *Server) HandleConnection(conn net.Conn) {
-	defer conn.Close()
+	defer func() {
+		log.Printf("closing client %s", conn.RemoteAddr())
+		conn.Close()
+	}()
 
-	client := &Client{server: s, conn: conn, reader: NewResp(conn), writer: NewWriter(conn), tx: &Transacion{}, db: s.db, aof: s.aof}
+	client := &Client{
+		server: s,
+		conn:   conn,
+		reader: NewResp(conn),
+		writer: NewWriter(conn),
+		db:     s.db,
+		aof:    s.aof}
 
 	s.clients = append(s.clients, client)
 
@@ -47,14 +57,21 @@ func (s *Server) HandleConnection(conn net.Conn) {
 	for {
 		req, err := client.reader.Read()
 		if err != nil {
+			log.Printf(`read error %s: %#v`, conn.RemoteAddr(), req)
 			return
 		}
+
+		log.Printf("read request %q", string(req.Marshal()))
 
 		result := client.HandleCommand(req)
 
 		if err := client.writer.Write(result.Reply); err != nil {
+			log.Printf("write error to %s: %#v", conn.RemoteAddr(), err)
+
 			return
 		}
+
+		log.Printf("wrote reply to %s", conn.RemoteAddr())
 
 	}
 }

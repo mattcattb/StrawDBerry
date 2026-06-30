@@ -103,16 +103,9 @@ func setTypeDel(obj *RedisObject, member string) (bool, error) {
 	return exists, nil
 }
 
-func SAdd(c *Client, args []Value) CommandResult {
-
-	strVals, err := parseBulkRespStringCommands(args)
-
-	if err != nil {
-		return Failed(wrongArgs("SADD"))
-	}
-
-	key := strVals[0]
-	members := strVals[1:]
+func SAdd(c *Client, args []string) CommandResult {
+	key := args[0]
+	members := args[1:]
 
 	c.db.mu.Lock()
 	defer c.db.mu.Unlock()
@@ -133,16 +126,9 @@ func SAdd(c *Client, args []Value) CommandResult {
 	return CommandResult{Reply: Integer(added)}
 }
 
-func SCard(c *Client, args []Value) CommandResult {
+func SCard(c *Client, args []string) CommandResult {
 	// Returns the set cardinality (number of elements) of the set stored at key.
-
-	strVals, err := parseBulkRespStringCommands(args)
-
-	if err != nil {
-		return Failed(wrongArgs("SCARD"))
-	}
-
-	key := strVals[0]
+	key := args[0]
 
 	c.db.mu.Lock()
 	defer c.db.mu.Unlock()
@@ -161,10 +147,10 @@ func SCard(c *Client, args []Value) CommandResult {
 	return Result(Integer(len(m)))
 }
 
-func SRem(c *Client, args []Value) CommandResult {
+func SRem(c *Client, args []string) CommandResult {
 	return Failed(Error("ERR not implemented"))
 }
 
-func SIsMem(c *Client, args []Value) CommandResult {
+func SIsMem(c *Client, args []string) CommandResult {
 	return Failed(Error("ERR not implemented"))
 }

@@ -125,25 +125,15 @@ func (ps *PubSubServer) unsub(channel string, client *Client) int {
 	return connectedChannels
 }
 
-func Subscribe(c *Client, args []Value) CommandResult {
-	channels, err := parseBulkRespStringCommands(args)
-	if err != nil {
-		return Failed(wrongArgs("SUBSCRIBE"))
-	}
-	channel := channels[0]
+func Subscribe(c *Client, args []string) CommandResult {
+	channel := args[0]
 	c.mode = ModePubsub
 	n := c.server.ps.sub(c, channel)
 	return Result(Array([]Value{BulkString("subscribe"), BulkString(channel), Integer(n)}))
 }
 
-func Unsubscribe(c *Client, args []Value) CommandResult {
-	channels, err := parseBulkRespStringCommands(args)
-
-	if err != nil {
-		return Failed(wrongArgs("UNSUBSCRIBE"))
-	}
-
-	unsubChannel := channels[0]
+func Unsubscribe(c *Client, args []string) CommandResult {
+	unsubChannel := args[0]
 
 	n := c.server.ps.unsub(unsubChannel, c)
 	if n == 0 {
@@ -154,15 +144,9 @@ func Unsubscribe(c *Client, args []Value) CommandResult {
 	return Result(Array([]Value{BulkString("unsubscribe"), BulkString(unsubChannel), Integer(n)}))
 }
 
-func Publish(c *Client, args []Value) CommandResult {
-
+func Publish(c *Client, args []string) CommandResult {
 	// number subscribers recieved message
-	vals, err := parseBulkRespStringCommands(args)
-
-	if err != nil {
-		return Failed(wrongArgs("PUBLISH"))
-	}
-	channel, message := vals[0], vals[1]
+	channel, message := args[0], args[1]
 
 	clients := c.server.ps.getSubed(channel)
 

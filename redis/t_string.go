@@ -126,45 +126,43 @@ func setStringObjectValue(obj *RedisObject, value string) {
 	obj.ptr = rawStringPayload(value)
 }
 
-func Set(c *Client, args []Value) CommandResult {
-	key, ok := args[0].BulkString()
-	if !ok {
-		return Failed(syntaxError())
-	}
-	val, ok := args[1].BulkString()
+type setOptions struct {
+	nx    bool
+	xx    bool
+	get   bool
+	ex    *int // expire in s
+	px    *int // expire in ms
+	expMs *int // uhhhh hmmm
 
-	if !ok {
-		return Failed(syntaxError())
-	}
+	keepTtl bool
+	// ex expire seconds, px expire ms
+	xAt  *int // expire at s
+	pXAt *int // expire at ms
+
+}
+
+func Set(c *Client, args []string) CommandResult {
+	key, val := args[0], args[1]
 
 	c.db.mu.Lock()
 	defer c.db.mu.Unlock()
 
 	// NX Only set the key if it does not already exist.
-
 	// XX Only set the key if it already exists.
 
 	setBehavior := 0 // -1 doesnt already exist, 1 set if already exists
 	expiresAtMs := -1
 
 	for i := 2; i < len(args); i += 1 {
-		arg := args[i]
-		argVal, ok := arg.BulkString()
+		argVal := args[i]
 
-		if !ok {
-			return Failed(wrongArgs("set"))
-		}
 		switch argVal {
 		case "EX", "ex":
 			// expire at s
 			if len(args) < i+1 {
 				return Failed(wrongArgs("set"))
 			}
-			expireSArg, ok := args[i+1].BulkString()
-
-			if !ok {
-				return Failed(syntaxError())
-			}
+			expireSArg := args[i+1]
 
 			expireAtS, ok := tryParseInt(expireSArg)
 			if !ok || (expireAtS < 1) {
@@ -178,11 +176,7 @@ func Set(c *Client, args []Value) CommandResult {
 			if len(args) < i+1 {
 				return Failed(wrongArgs("set"))
 			}
-			expireMSArg, ok := args[i+1].BulkString()
-
-			if !ok {
-				return Failed(syntaxError())
-			}
+			expireMSArg := args[i+1]
 
 			expireAtMS, ok := tryParseInt(expireMSArg)
 			if !ok || (expireAtMS < 1) {
@@ -238,20 +232,8 @@ func Set(c *Client, args []Value) CommandResult {
 
 }
 
-func Get(c *Client, args []Value) CommandResult {
-
-	if len(args) != 1 {
-		return Failed(wrongArgs("get"))
-	}
-
-	keyArg := args[0]
-
-	key, ok := keyArg.BulkString()
-
-	if !ok {
-		return Failed(wrongArgs("get"))
-	}
-
+func Get(c *Client, args []string) CommandResult {
+	key := args[0]
 	obj, exists := c.db.lookupKey(key)
 
 	if !exists {
@@ -267,17 +249,9 @@ func Get(c *Client, args []Value) CommandResult {
 	return Result(BulkString(val))
 }
 
-func Incr(c *Client, args []Value) CommandResult {
+func Incr(c *Client, args []string) CommandResult {
 
-	if len(args) != 1 {
-		return Failed(wrongArgs("incr"))
-	}
-
-	key, ok := args[0].BulkString()
-
-	if !ok {
-		return Failed(syntaxError())
-	}
+	key := args[0]
 
 	finalVal, err := deltaStrValue(c, key, 1)
 
@@ -288,17 +262,9 @@ func Incr(c *Client, args []Value) CommandResult {
 	return Result(Integer(finalVal))
 }
 
-func Decr(c *Client, args []Value) CommandResult {
-	if len(args) != 1 {
-		return Failed(wrongArgs("decr"))
-	}
+func Decr(c *Client, args []string) CommandResult {
 
-	key, ok := args[0].BulkString()
-
-	if !ok {
-		return Failed(syntaxError())
-	}
-
+	key := args[0]
 	finalVal, err := deltaStrValue(c, key, -1)
 
 	if err != nil {
@@ -308,24 +274,8 @@ func Decr(c *Client, args []Value) CommandResult {
 	return Result(Integer(finalVal))
 }
 
-func DecrBy(c *Client, args []Value) CommandResult {
-
-	if len(args) != 2 {
-		return Failed(wrongArgs("decrby"))
-	}
-
-	key, ok := args[0].BulkString()
-
-	if !ok {
-		return Failed(syntaxError())
-	}
-
-	decrByArg, ok := args[1].BulkString()
-
-	if !ok {
-		return Failed(syntaxError())
-	}
-
+func DecrBy(c *Client, args []string) CommandResult {
+	key, decrByArg := args[0], args[1]
 	decrBy, err := strconv.Atoi(decrByArg)
 
 	if err != nil {
@@ -342,23 +292,8 @@ func DecrBy(c *Client, args []Value) CommandResult {
 	return Result(Integer(n))
 }
 
-func IncrBy(c *Client, args []Value) CommandResult {
-	if len(args) != 2 {
-		return Failed(wrongArgs("incrby"))
-	}
-
-	key, ok := args[0].BulkString()
-
-	if !ok {
-		return Failed(syntaxError())
-	}
-
-	incrByArg, ok := args[1].BulkString()
-
-	if !ok {
-		return Failed(syntaxError())
-	}
-
+func IncrBy(c *Client, args []string) CommandResult {
+	key, incrByArg := args[0], args[1]
 	incrBy, err := strconv.Atoi(incrByArg)
 
 	if err != nil {
@@ -407,20 +342,10 @@ func deltaStrValue(c *Client, key string, delta int) (int, error) {
 	return value, nil
 }
 
-func MGet(c *Client, args []Value) CommandResult {
-	if len(args) < 1 {
-		return Failed(wrongArgs("mget"))
-	}
-
-	mKeys := make([]string, len(args))
+func MGet(c *Client, args []string) CommandResult {
 	respValues := make([]Value, 0)
 
-	mKeys, err := parseBulkRespStringCommands(args)
-	if err != nil {
-		return Failed(wrongTypeError())
-	}
-
-	for _, key := range mKeys {
+	for _, key := range args {
 		obj, exists := c.db.lookupKey(key)
 		if !exists {
 			respValues = append(respValues, Null())
@@ -439,13 +364,8 @@ func MGet(c *Client, args []Value) CommandResult {
 
 }
 
-func MSet(c *Client, args []Value) CommandResult {
+func MSet(c *Client, args []string) CommandResult {
 	// MSET key value [key value ...]
-
-	if len(args) < 2 {
-		return Failed(wrongArgs("mset"))
-	}
-
 	if len(args)%2 == 1 {
 		return Failed(wrongArgs("mset"))
 	}
@@ -453,14 +373,7 @@ func MSet(c *Client, args []Value) CommandResult {
 	kvPairs := make([][2]string, 0)
 
 	for i := 0; i < len(args); i += 2 {
-		kArg, ok := args[i].BulkString()
-		if !ok {
-			return Failed(syntaxError())
-		}
-		valArg, ok := args[i+1].BulkString()
-		if !ok {
-			return Failed(syntaxError())
-		}
+		kArg, valArg := args[i], args[i+1]
 		kvPairs = append(kvPairs, [2]string{kArg, valArg})
 	}
 

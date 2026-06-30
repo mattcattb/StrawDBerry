@@ -1,6 +1,8 @@
 package redis
 
-import "net"
+import (
+	"net"
+)
 
 type ClientMode uint8
 
@@ -16,19 +18,19 @@ type PersistanceLog interface {
 }
 
 type Client struct {
-	out    chan Value
-	server *Server
-	conn   net.Conn
-	reader *Resp
-	writer *Writer
-	tx     *Transacion
-	db     *RedisDb
-	aof    PersistanceLog
-	mode   ClientMode
+	out     chan Value
+	server  *Server
+	conn    net.Conn
+	reader  *Resp
+	writer  *Writer
+	txQueue []Value
+	db      *RedisDb
+	aof     PersistanceLog
+	mode    ClientMode
 }
 
 func NewClient(conn net.Conn, server *Server) *Client {
-	return &Client{server: server, conn: conn, reader: NewResp(conn), writer: NewWriter(conn), tx: &Transacion{}, db: server.db, aof: server.aof, mode: ModeNormal}
+	return &Client{server: server, conn: conn, reader: NewResp(conn), writer: NewWriter(conn), db: server.db, aof: server.aof, mode: ModeNormal}
 }
 
 func (c *Client) ListenToPublishing(bufSize int) {
@@ -72,35 +74,28 @@ func (c *Client) HandleCommand(req Value) CommandResult {
 		handles AOF behaviors for command result (writing command to log if mutation occured)
 	*/
 
-	command, args, valid := ParseCommand(req)
-	if !valid {
+	command, args, err := ParseCommand(req)
+	if err != nil {
 		return Failed(syntaxError())
 	}
+
 	spec, ok := c.server.sh.getCommandSpec(command)
 	if !ok {
+
 		return Failed(unknownCommand(command))
 	}
 
-	// validate args
-	err := validateCommandArity(spec, command, args)
-
-	if err != nil {
+	if err = validateSpecArity(spec, command, args); err != nil {
 		return Failed(wrongArgs(command))
 	}
-
 	// validate mode, make sure command can be done in current client mode
-	err = validateCommandMode(c, spec)
-
-	if err != nil {
+	if err = validateCommandMode(c, spec); err != nil {
 		return Failed(invalidStateError())
 	}
 
-	// queue transaction depends on the mode
-	// run command
-
 	if shouldQueuePipeline(c, command, spec) {
 		// queue this only
-		c.tx.queueVal(req)
+		c.txQueue = append(c.txQueue, req)
 		return Result(SimpleString("OK"))
 	}
 

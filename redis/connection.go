@@ -15,25 +15,15 @@ func registerConnectionCommands(ch *SpecHandler) {
 	})
 }
 
-func Ping(c *Client, args []Value) CommandResult {
-	if len(args) > 1 {
-		return Failed(wrongArgs("PING"))
-	}
+func Ping(c *Client, args []string) CommandResult {
 
 	if len(args) == 0 {
-		return Result(SimpleString("pong"))
+		return Result(SimpleString("PONG"))
 	}
 
-	argMsg, _ := args[0].BulkString()
-
-	return Result(BulkString(argMsg))
+	return Result(BulkString(args[0]))
 }
 
-func Echo(c *Client, args []Value) CommandResult {
-	argMsg, ok := args[0].BulkString()
-	if !ok {
-		return Failed(syntaxError())
-	}
-
-	return Result(BulkString(argMsg))
+func Echo(c *Client, args []string) CommandResult {
+	return Result(BulkString(args[0]))
 }

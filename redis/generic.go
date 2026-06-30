@@ -37,25 +37,14 @@ func registerGenericCommands(sh *SpecHandler) {
 
 // OBJECT ENCODING
 
-func Copy(c *Client, args []Value) CommandResult {
+func Copy(c *Client, args []string) CommandResult {
 	return Failed(Error("ERR not implemented"))
 }
 
-func Exists(c *Client, args []Value) CommandResult {
-	existsKeys := make([]string, len(args))
-
-	for i := 0; i < len(args); i += 1 {
-		delKey, ok := args[i].BulkString()
-		if !ok {
-			return Failed(syntaxError())
-		}
-
-		existsKeys[i] = delKey
-	}
-
+func Exists(c *Client, args []string) CommandResult {
 	existCount := 0
 
-	for _, key := range existsKeys {
+	for _, key := range args {
 		_, exists := c.db.lookupKey(key)
 		if exists {
 			existCount += 1
@@ -66,11 +55,11 @@ func Exists(c *Client, args []Value) CommandResult {
 
 }
 
-func Expire(c *Client, args []Value) CommandResult {
+func Expire(c *Client, args []string) CommandResult {
 	return Failed(Error("ERR not implemented"))
 }
 
-func Ttl(c *Client, args []Value) CommandResult {
+func Ttl(c *Client, args []string) CommandResult {
 
 	/*
 		Integer reply: TTL in seconds.
@@ -78,10 +67,7 @@ func Ttl(c *Client, args []Value) CommandResult {
 		Integer reply: -2 if the key does not exist.
 	*/
 
-	key, ok := args[0].BulkString()
-	if !ok {
-		return Failed(syntaxError())
-	}
+	key := args[0]
 
 	obj, exists := c.db.lookupKey(key)
 
@@ -103,22 +89,10 @@ func Ttl(c *Client, args []Value) CommandResult {
 	return Result(Integer(seconds))
 }
 
-func Del(c *Client, args []Value) CommandResult {
-	delKeys := make([]string, len(args))
-
-	for i := 0; i < len(args); i += 1 {
-		delK, ok := args[i].BulkString()
-
-		if !ok {
-			return Failed(syntaxError())
-		}
-
-		delKeys[i] = delK
-	}
-
+func Del(c *Client, args []string) CommandResult {
 	deletedCount := 0
 
-	for _, dk := range delKeys {
+	for _, dk := range args {
 		existed := c.db.deleteKey(dk)
 		if existed {
 			deletedCount += 1
@@ -134,12 +108,8 @@ func Del(c *Client, args []Value) CommandResult {
 }
 
 // string, list, set, zset, hash, stream, and vectorset.
-func Type(c *Client, args []Value) CommandResult {
-	key, ok := args[0].BulkString()
-
-	if !ok {
-		return Failed(syntaxError())
-	}
+func Type(c *Client, args []string) CommandResult {
+	key := args[0]
 
 	obj, exists := c.db.lookupKey(key)
 

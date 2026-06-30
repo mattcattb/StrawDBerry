@@ -3,12 +3,12 @@ package redis
 import "testing"
 
 func TestParseCommandUppercasesCommandAndKeepsArgs(t *testing.T) {
-	gotCommand, gotArgs, ok := ParseCommand(Array([]Value{
+	gotCommand, gotArgs, err := ParseCommand(Array([]Value{
 		BulkString("get"),
 		BulkString("name"),
 	}))
-	if !ok {
-		t.Fatal("ParseCommand() ok = false, want true")
+	if err != nil {
+		t.Fatalf("ParseCommand() error = %v, want nil", err)
 	}
 	if gotCommand != "GET" {
 		t.Fatalf("command = %q, want %q", gotCommand, "GET")
@@ -17,9 +17,9 @@ func TestParseCommandUppercasesCommandAndKeepsArgs(t *testing.T) {
 		t.Fatalf("len(args) = %d, want 1", len(gotArgs))
 	}
 
-	gotKey, ok := gotArgs[0].BulkString()
-	if !ok || gotKey != "name" {
-		t.Fatalf("arg[0] = %q, %v; want %q, true", gotKey, ok, "name")
+	gotKey := gotArgs[0]
+	if gotKey != "name" {
+		t.Fatalf("arg[0] = %q, want %q", gotKey, "name")
 	}
 }
 
@@ -35,9 +35,9 @@ func TestParseCommandRejectsInvalidInput(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			command, args, ok := ParseCommand(tt.in)
-			if ok {
-				t.Fatalf("ParseCommand() = %q, %#v, true; want invalid", command, args)
+			command, args, err := ParseCommand(tt.in)
+			if err == nil {
+				t.Fatalf("ParseCommand() = %q, %#v, nil; want error", command, args)
 			}
 		})
 	}

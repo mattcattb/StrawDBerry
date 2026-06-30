@@ -78,18 +78,10 @@ func hashTypeDel(obj *RedisObject, fields ...string) (deleted int, err error) {
 
 } */
 
-func HGet(c *Client, args []Value) CommandResult {
+func HGet(c *Client, args []string) CommandResult {
 	// HGET key field
 	// returns Array field, value
-	if len(args) != 2 {
-		return Failed(wrongArgs("hget"))
-	}
-	strArgs, err := parseBulkRespStringCommands(args)
-	if err != nil {
-		return Failed(wrongTypeError())
-	}
-
-	key, field := strArgs[0], strArgs[1]
+	key, field := args[0], args[1]
 
 	c.db.mu.Lock()
 	defer c.db.mu.Unlock()
@@ -114,18 +106,11 @@ func HGet(c *Client, args []Value) CommandResult {
 
 }
 
-func HSet(c *Client, args []Value) CommandResult {
+func HSet(c *Client, args []string) CommandResult {
 	// HSET key field value [field value ...]
 	// returns int of set fields
-
-	strArgs, err := parseBulkRespStringCommands(args)
-
-	if err != nil {
-		return Failed(wrongTypeError())
-	}
-
-	key := strArgs[0]
-	kvArray := strArgs[1:]
+	key := args[0]
+	kvArray := args[1:]
 
 	if len(kvArray) == 0 || len(kvArray)%2 != 0 {
 		return Failed(wrongArgs("HSET"))
@@ -161,13 +146,9 @@ func HSet(c *Client, args []Value) CommandResult {
 
 }
 
-func HDel(c *Client, args []Value) CommandResult {
+func HDel(c *Client, args []string) CommandResult {
 	// key field [field ...]
-	strArgs, err := parseBulkRespStringCommands(args)
-	if err != nil || len(strArgs) < 2 {
-		return Failed(wrongArgs("HDel"))
-	}
-	key, fieldValues := strArgs[0], strArgs[1:]
+	key, fieldValues := args[0], args[1:]
 
 	c.db.mu.Lock()
 	defer c.db.mu.Unlock()
@@ -200,21 +181,13 @@ func HDel(c *Client, args []Value) CommandResult {
 	return Result(Integer(delCount))
 
 }
-func HGetAll(c *Client, args []Value) CommandResult {
+func HGetAll(c *Client, args []string) CommandResult {
 	// HGETALL key
 	// returns Array field, value
 
 	//  a list of fields and their values, or an empty list when key does not exist
 
-	if len(args) != 1 {
-		return Failed(wrongArgs("hgetall"))
-	}
-
-	key, ok := args[0].BulkString()
-
-	if !ok {
-		return Failed(syntaxError())
-	}
+	key := args[0]
 
 	c.db.mu.Lock()
 	defer c.db.mu.Unlock()
@@ -240,19 +213,9 @@ func HGetAll(c *Client, args []Value) CommandResult {
 
 }
 
-func HExists(c *Client, args []Value) CommandResult {
+func HExists(c *Client, args []string) CommandResult {
 	// HEXISTS key field
-
-	if len(args) != 2 {
-		return Failed(wrongArgs("hexists"))
-	}
-
-	strArgs, err := parseBulkRespStringCommands(args)
-	if err != nil {
-		return Failed(wrongTypeError())
-	}
-
-	key, field := strArgs[0], strArgs[1]
+	key, field := args[0], args[1]
 
 	obj, exists := c.db.lookupKey(key)
 

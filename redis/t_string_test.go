@@ -6,10 +6,11 @@ func newStringCommandTestClient() *Client {
 	db := NewDb()
 	server := NewServer(db, nil, NewSH())
 
+	server.RegisterAllCommandHandlers()
+
 	return &Client{
 		server: server,
 		db:     db,
-		tx:     &Transacion{},
 		mode:   ModeNormal,
 	}
 }
@@ -17,10 +18,7 @@ func newStringCommandTestClient() *Client {
 func TestStringCommandSetThenGet(t *testing.T) {
 	c := newStringCommandTestClient()
 
-	set := Set(c, []Value{
-		BulkString("name"),
-		BulkString("mat"),
-	})
+	set := Set(c, commandArrayCreate("name", "mat"))
 	if set.Failed {
 		t.Fatalf("SET failed: %#v", set.Reply)
 	}
@@ -30,7 +28,7 @@ func TestStringCommandSetThenGet(t *testing.T) {
 		t.Fatalf("SET reply = %q, %v; want %q, true", gotStatus, ok, "OK")
 	}
 
-	get := Get(c, []Value{BulkString("name")})
+	get := Get(c, commandArrayCreate("name"))
 	if get.Failed {
 		t.Fatalf("GET failed: %#v", get.Reply)
 	}
@@ -44,7 +42,7 @@ func TestStringCommandSetThenGet(t *testing.T) {
 func TestStringCommandGetMissingKeyReturnsNull(t *testing.T) {
 	c := newStringCommandTestClient()
 
-	got := Get(c, []Value{BulkString("missing")})
+	got := Get(c, []string{"missing"})
 	if got.Failed {
 		t.Fatalf("GET failed: %#v", got.Reply)
 	}
@@ -56,13 +54,13 @@ func TestStringCommandGetMissingKeyReturnsNull(t *testing.T) {
 func TestStringCommandIncrCreatesAndIncrementsValue(t *testing.T) {
 	c := newStringCommandTestClient()
 
-	first := Incr(c, []Value{BulkString("count")})
+	first := Incr(c, []string{"count"})
 	got, ok := first.Reply.Integer()
 	if first.Failed || !ok || got != 1 {
 		t.Fatalf("first INCR = %d, failed=%v, ok=%v; want 1, false, true", got, first.Failed, ok)
 	}
 
-	second := Incr(c, []Value{BulkString("count")})
+	second := Incr(c, []string{"count"})
 	got, ok = second.Reply.Integer()
 	if second.Failed || !ok || got != 2 {
 		t.Fatalf("second INCR = %d, failed=%v, ok=%v; want 2, false, true", got, second.Failed, ok)
@@ -72,14 +70,10 @@ func TestStringCommandIncrCreatesAndIncrementsValue(t *testing.T) {
 func TestStringCommandMGetPreservesOrderAndMissingValues(t *testing.T) {
 	c := newStringCommandTestClient()
 
-	Set(c, []Value{BulkString("first"), BulkString("one")})
-	Set(c, []Value{BulkString("third"), BulkString("three")})
+	Set(c, []string{"first", "one"})
+	Set(c, []string{"third", "three"})
 
-	res := MGet(c, []Value{
-		BulkString("first"),
-		BulkString("second"),
-		BulkString("third"),
-	})
+	res := MGet(c, []string{"first", "second", "third"})
 	if res.Failed {
 		t.Fatalf("MGET failed: %#v", res.Reply)
 	}
