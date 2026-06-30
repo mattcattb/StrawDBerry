@@ -2,6 +2,7 @@ package redis
 
 import (
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -15,63 +16,6 @@ func tryParseInt(val string) (int, bool) {
 
 	return n, true
 
-}
-
-func registerTstringCommands(sh *SpecHandler) {
-
-	specMap := map[string]CommandSpec{
-		"GET": CommandSpec{
-			arity:   1,
-			flags:   CmdRead,
-			handler: Get,
-		},
-		"SET": CommandSpec{
-			arity:   -2,
-			flags:   CmdWrite,
-			handler: Set,
-		},
-		"MGET": CommandSpec{
-			arity:   -1,
-			flags:   CmdRead,
-			handler: MGet,
-		},
-
-		"MSET": CommandSpec{
-			arity:   -2,
-			flags:   CmdWrite,
-			handler: MSet,
-		},
-		"INCR": {
-			arity:   1,
-			handler: Incr,
-			flags:   CmdWrite,
-		},
-		"DECR": {
-			arity:   1,
-			handler: Decr,
-			flags:   CmdWrite,
-		},
-
-		"INCRBY": {
-			arity:   2,
-			handler: IncrBy,
-			flags:   CmdWrite,
-		},
-
-		"DECRBY": {
-			arity:   2,
-			handler: DecrBy,
-			flags:   CmdWrite,
-		},
-	}
-
-	for k, v := range specMap {
-		v.group = StringGroup
-		v.name = k
-		specMap[k] = v
-	}
-
-	sh.registerCommandSpecs(specMap)
 }
 
 func newStringObject(value string) *RedisObject {
@@ -127,12 +71,11 @@ func setStringObjectValue(obj *RedisObject, value string) {
 }
 
 type setOptions struct {
-	nx    bool
-	xx    bool
-	get   bool
-	ex    *int // expire in s
-	px    *int // expire in ms
-	expMs *int // uhhhh hmmm
+	nx  bool
+	xx  bool
+	get bool
+	ex  *int // expire in s
+	px  *int // expire in ms
 
 	keepTtl bool
 	// ex expire seconds, px expire ms
@@ -141,62 +84,80 @@ type setOptions struct {
 
 }
 
+func parseOptionalArgs(args []string) (so setOptions, err error) {
+	argLen := len(args)
+	for i := 2; i < argLen; i += 1 {
+		switch strings.ToUpper(args[i]) {
+		case "NX":
+			if so.xx {
+				// xx has already been set, cannot set both (mutually exclusive)
+				return so, ErrWrongArgs
+			}
+			so.nx = true
+		case "XX":
+
+			if so.nx {
+				return so, ErrWrongArgs
+			}
+
+			so.xx = true
+
+		case "EX":
+			if i >= argLen {
+				// we dont have an extra one here
+				return so, ErrWrongArgs
+			}
+
+			secStr := args[i+1]
+			secVal, ok := tryParseInt(secStr)
+			if !ok {
+				return so, ErrInvalidEncoding
+			}
+
+			so.ex = &secVal
+			i++
+
+		case "PX":
+			if i >= argLen {
+				// we dont have an extra one here
+				return so, ErrWrongArgs
+			}
+
+			msStr := args[i+1]
+			msVal, ok := tryParseInt(msStr)
+			if !ok {
+				return so, ErrInvalidEncoding
+			}
+
+			so.px = &msVal
+			i++
+		case "KEEPTTL":
+			so.keepTtl = true
+		}
+	}
+
+	return so, nil
+}
+
 func Set(c *Client, args []string) CommandResult {
 	key, val := args[0], args[1]
 
 	c.db.mu.Lock()
 	defer c.db.mu.Unlock()
 
-	// NX Only set the key if it does not already exist.
-	// XX Only set the key if it already exists.
-
-	setBehavior := 0 // -1 doesnt already exist, 1 set if already exists
 	expiresAtMs := -1
 
-	for i := 2; i < len(args); i += 1 {
-		argVal := args[i]
+	options, err := parseOptionalArgs(args)
 
-		switch argVal {
-		case "EX", "ex":
-			// expire at s
-			if len(args) < i+1 {
-				return Failed(wrongArgs("set"))
-			}
-			expireSArg := args[i+1]
+	if err != nil {
+		return Failed(wrongArgs("SET"))
+	}
 
-			expireAtS, ok := tryParseInt(expireSArg)
-			if !ok || (expireAtS < 1) {
-				return Failed(invalidInteger())
-			}
-			expiresAtMs = expireAtS * 1000
-			i += 1
-			continue
-		case "PX", "px":
-			// expire at ms
-			if len(args) < i+1 {
-				return Failed(wrongArgs("set"))
-			}
-			expireMSArg := args[i+1]
-
-			expireAtMS, ok := tryParseInt(expireMSArg)
-			if !ok || (expireAtMS < 1) {
-				return Failed(invalidInteger())
-			}
-			expiresAtMs = expireAtMS
-			i += 1
-			continue
-		case "NX", "nx":
-			// only set if doesnt exist
-			setBehavior = -1
-			continue
-		case "XX", "xx":
-			// only set if exists
-			setBehavior = 1
-			continue
-
-		default:
-			return Failed(syntaxError())
-		}
+	if options.ex != nil {
+		expiresAtMs = *options.ex * 1000
+	}
+	if options.px != nil {
+		expiresAtMs = *options.px
 	}
 
 	newObj := newStringObject(val)
@@ -205,21 +166,20 @@ func Set(c *Client, args []string) CommandResult {
 		newObj.expiresAt = time.Now().Add(time.Millisecond * time.Duration(expiresAtMs))
 	}
 
-	shouldSet := false
+	shouldSet := true
 
-	if setBehavior != 0 {
-		_, exists := c.db.lookupKey(key)
-		if setBehavior == -1 && !exists {
-			// set if doesnt already exist
+	if options.xx {
+		// set if exists
+		if _, exists := c.db.lookupKey(key); !exists {
+			shouldSet = false
+		}
 
-			shouldSet = true
+	} else if options.nx {
+		// set if doesnt exist
+
+		if _, exists := c.db.lookupKey(key); exists {
+			shouldSet = false
 		}
-		if setBehavior == 1 && exists {
-			// set if already exists
-			shouldSet = true
-		}
-	} else {
-		shouldSet = true
 	}
 
 	if shouldSet {
@@ -227,6 +187,9 @@ func Set(c *Client, args []string) CommandResult {
 		c.server.dirty += 1
 		return Result(SimpleString("OK"))
 	}
+	// TODO get
+
+	// GET: return old string stored at the key, or nil if the key did not exist. An error is returned and SET is aborted if the value stored at the key is not a string.
 
 	return Result(Null())
 
@@ -387,4 +350,40 @@ func MSet(c *Client, args []string) CommandResult {
 
 	c.server.dirty += 1
 	return Result(SimpleString("ok"))
+}
+
+// Returns the length of the string value stored at key. An error is returned when key holds a non-string value.
+func StrLen(c *Client, args []string) CommandResult {
+	key := args[0]
+
+	c.db.mu.Lock()
+	defer c.db.mu.Unlock()
+
+	obj, exists := c.db.lookupKey(key)
+
+	if !exists {
+		return Result(Integer(0))
+	}
+
+	vStr, n := stringObjectValue(obj)
+
+	if n != nil {
+		return Failed(wrongTypeError())
+	}
+
+	return Result(Integer(len(vStr)))
+}
+
+type lcsArgs struct {
+	length       bool
+	idx          bool
+	minMatchLen  int  // When used with IDX, return matches at least min-match-len char long.
+	withMatchLen bool // include the length of each match in the result
+}
+
+func Lcs(c *Client, args []string) CommandResult {
+
+	//The LCS command implements the longest common subsequence algorithm. Note that this is different than the longest common string algorithm, since matching characters in the string does not need to be contiguous.
+	// LCS key1 key2 [LEN] [IDX] [MINMATCHLEN min-match-len] [WITHMATCHLEN]
+	return Failed(SimpleError("not yet implemented"))
 }

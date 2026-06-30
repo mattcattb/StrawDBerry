@@ -35,7 +35,7 @@ func main() {
 
 	if err != nil {
 		// no aof here...
-		fmt.Printf(err.Error())
+		fmt.Print(err.Error())
 		panic(err)
 	}
 
