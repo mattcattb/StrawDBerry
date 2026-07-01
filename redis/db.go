@@ -2,63 +2,86 @@ package redis
 
 import (
 	"sync"
-	"time"
 )
 
+type DbStats struct {
+	ksMisses    uint64
+	ksHits      uint64
+	expiredKeys uint64
+	deletedKeys uint64
+}
 type RedisDb struct {
-	mu   sync.RWMutex
-	dict map[string]*RedisObject
+	mu    sync.RWMutex
+	dict  map[string]*RedisObject
+	stats DbStats
 } // todo: versions
 
+type DbStatsSnapshot struct {
+	DbStats
+	keys    uint64
+	expires uint64
+}
+
 func NewDb() *RedisDb {
-	return &RedisDb{dict: map[string]*RedisObject{}}
+	return &RedisDb{dict: map[string]*RedisObject{}, mu: sync.RWMutex{}}
 }
 
 // !
 
 func (db *RedisDb) lookupKey(key string) (*RedisObject, bool) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
 	obj := db.dict[key]
 	if obj == nil {
+		// key miss
+		db.stats.ksMisses++
 		return nil, false
 	}
 
 	if obj.expired() {
+		// key expiration
+		db.stats.expiredKeys++
+		db.stats.ksMisses++
 		delete(db.dict, key)
 		return nil, false
 	}
 
+	db.stats.ksHits++
 	return obj, true
 }
 
 // do a memory check here?
 func (db *RedisDb) setKey(key string, obj *RedisObject) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
 	db.dict[key] = obj
 }
 func (db *RedisDb) deleteKey(key string) bool {
 
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
 	obj := db.dict[key]
 
 	if obj == nil {
+		db.stats.ksMisses++
 		return false
 	}
+	db.stats.ksHits++
+	db.stats.deletedKeys++
 
 	delete(db.dict, key)
 	return true
 }
-func (o *RedisObject) expired() bool {
-	now := time.Now().UnixMilli()
-	return o.expiresAt != noExpiration && o.expiresAt <= now
-}
 
-func (obj *RedisObject) ttlForObject() int64 {
-	if obj.expiresAt == noExpiration {
-		return -1
-	}
+func (db *RedisDb) StatsSnapshot() DbStatsSnapshot {
 
-	now := time.Now().UnixMilli()
-	if obj.expiresAt <= now {
-		return -2
-	}
+	db.mu.Lock()
+	defer db.mu.Unlock()
 
-	return (obj.expiresAt - now) / 1000
+	curStats := db.stats
+	keys := len(db.dict)
+
+	return DbStatsSnapshot{DbStats: curStats, keys: uint64(keys), expires: 0}
+
 }

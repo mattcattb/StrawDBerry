@@ -143,3 +143,27 @@ func (a *Aof) CompactLog(v Value) error {
 	// we need to do a few things...
 	return nil
 }
+
+type AofStats struct {
+	fCurrentSize uint64 // AOF current file size
+	fBaseSize    uint64 // AOF file size on latest startup or rewrite
+	bufferLength uint64 // AOF buffer size
+	fsyncCount   uint64
+	fsyncErrors  uint64
+
+	// aof_enabled
+	//todo rewrites added
+	// aof_rewrites
+	// aof_rewrite_buffer_length
+	// aof_pending_rewrite bool
+	// aof_rewrite_in_progress
+}
+
+/*
+loading_start_time: Epoch-based timestamp of the start of the load operation
+loading_total_bytes: Total file size
+loading_rdb_used_mem: The memory usage of the server that had generated the RDB file at the time of the file's creation
+loading_loaded_bytes: Number of bytes already loaded
+loading_loaded_perc: Same value expressed as a percentage
+loading_eta_seconds: ETA in seconds for the load to be complete
+*/

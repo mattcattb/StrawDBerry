@@ -46,11 +46,11 @@ func (c *Client) ListenToPublishing(bufSize int) {
 
 }
 
-func (c *Client) Disconnect() {
+func (c *Client) close() {
 
 	// close pubsub and disconnect client
 	close(c.out)
-	c.server.ps.disconnClient(c)
+	c.conn.Close()
 
 }
 
@@ -79,13 +79,13 @@ func (c *Client) HandleCommand(req Value) CommandResult {
 		return Failed(syntaxError())
 	}
 
-	spec, ok := c.server.sh.getCommandSpec(command)
+	spec, ok := c.server.sh.getCommand(command)
 	if !ok {
 
 		return Failed(unknownCommand(command))
 	}
 
-	if err = validateSpecArity(spec, command, args); err != nil {
+	if err = validateCommandArity(spec, command, args); err != nil {
 		return Failed(wrongArgs(command))
 	}
 	// validate mode, make sure command can be done in current client mode
@@ -101,7 +101,7 @@ func (c *Client) HandleCommand(req Value) CommandResult {
 
 	dirtyBefore := c.server.dirty
 
-	result := spec.handler(c, args)
+	result := spec.Handler(c, args)
 	// aof write
 	// ? make this jsut so spec is a write one
 	if shouldAppendAof(spec, dirtyBefore, c.server.dirty) {

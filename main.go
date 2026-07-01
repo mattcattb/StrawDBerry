@@ -40,7 +40,7 @@ func main() {
 	}
 
 	defer aof.Close()
-	sh := redis.NewSH()
+	sh := redis.NewCommandTable()
 
 	srv := redis.NewServer(db, aof, sh)
 	srv.RegisterAllCommandHandlers()
@@ -56,15 +56,5 @@ func main() {
 		return
 	}
 
-	for {
-		// Listen for connections
-		conn, err := l.Accept()
-		if err != nil {
-			fmt.Println(err)
-			continue
-		}
-
-		go srv.HandleConnection(conn)
-	}
-
+	go srv.SocketListenLoop(l)
 }

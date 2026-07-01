@@ -1,16 +1,16 @@
 package redis
 
-func registerConnectionCommands(ch *SpecHandler) {
-	ch.registerCommandSpecs(map[string]CommandSpec{
+func registerConnectionCommands(ch *CommandTable) {
+	ch.registerCommandSpecs(map[string]Command{
 		"PING": {
-			arity:   0,
-			handler: Ping,
-			group:   ConnGroup,
-			flags:   CmdAllowedInPubsub,
+			Arity:   0,
+			Handler: Ping,
+			Group:   ConnGroup,
+			Flags:   CmdAllowedInPubsub,
 		}, "ECHO": {
-			arity:   1,
-			handler: Echo,
-			group:   ConnGroup,
+			Arity:   1,
+			Handler: Echo,
+			Group:   ConnGroup,
 		},
 	})
 }

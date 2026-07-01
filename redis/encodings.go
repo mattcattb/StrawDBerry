@@ -9,6 +9,21 @@ const (
 	EncodingSetMap
 )
 
+func (e ObjectEncoding) StrRep() string {
+	switch e {
+	case EncodingInt:
+		return "EncodingInt"
+	case EncodingRaw:
+		return "EncodingRaw"
+	case EncodingHashMap:
+		return "EncodingHashMap"
+	case EncodingSetMap:
+		return "EncodingSetMap"
+	default:
+		return "UNKNOWN"
+	}
+}
+
 type objectPayload interface {
 	objectPayload()
 }

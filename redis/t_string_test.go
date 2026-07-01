@@ -7,7 +7,7 @@ import (
 
 func newStringCommandTestClient() *Client {
 	db := NewDb()
-	server := NewServer(db, nil, NewSH())
+	server := NewServer(db, nil, NewCommandTable())
 
 	server.RegisterAllCommandHandlers()
 

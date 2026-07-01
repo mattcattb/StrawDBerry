@@ -22,8 +22,8 @@ This is a learning project focused on the lower-level pieces: RESP parsing and w
 - redis stream commands
 - memory management
 - lru caching for memory limits
-- Blocking commands + client behavior
-- commandstats?
+- commandstats
+- Service Managment Config + limits
 
 #### management
 
@@ -37,3 +37,18 @@ Run tests with:
 ```sh
 go test ./...
 ```
+
+## Larger Features
+
+- key frequencies
+- Streams
+- Latency Behaviors
+- Replication
+- ACL
+- Fine tuned memory tracking
+- RDB
+- Monitoring
+- Blocking
+- Geo Indexes
+- watch + unwatch mutli exec
+- Lua Scripting

@@ -1,40 +1,41 @@
 package redis
 
-func registerGenericCommands(sh *SpecHandler) {
-	sh.registerCommandSpecs(map[string]CommandSpec{
-		"EXISTS": {
-			handler: Exists,
-			arity:   -1,
-			group:   GenericGroup,
-			flags:   CmdRead,
-		},
-		"TYPE": {
-			arity:   1,
-			group:   GenericGroup,
-			flags:   CmdRead,
-			handler: Type,
-		},
-		"TTL": {
-			arity:   1,
-			group:   GenericGroup,
-			flags:   CmdWrite,
-			handler: Ttl,
-		},
-		"DEL": {
-			arity:   -1,
-			group:   GenericGroup,
-			flags:   CmdWrite,
-			handler: Del,
-		},
-		"COPY": {handler: Copy, arity: 2, group: GenericGroup, flags: CmdWrite},
-	})
-
-}
-
 // OBJECT ENCODING
 
 func Copy(c *Client, args []string) CommandResult {
-	return Failed(Error("ERR not implemented"))
+
+	return Failed(Error("not implemented yet"))
+
+	/*
+		srcK, destK := args[0], args[1]
+		replace := false
+
+		// COPY source destination [REPLACE]
+		res := 0 // 0 not copied, 1 if copied
+
+		if len(args) > 2 && args[2] == "REPLACE" {
+			replace = true
+		}
+
+		c.db.mu.Lock()
+		defer c.db.mu.Unlock()
+
+		src, e := c.db.lookupKey(srcK)
+
+		if e {
+			// e exists so lets get the resp
+			dest, de := c.db.lookupKey(destK)
+
+			// replace IF replace true OR dest empty
+
+			if !de || replace {
+				newVal := RedisObject{}
+				copy(src, &newVal)
+				c.db.setKey(destK, &newVal)
+			}
+		}
+
+		return Result(Integer(res)) */
 }
 
 func Exists(c *Client, args []string) CommandResult {
@@ -79,6 +80,26 @@ func Ttl(c *Client, args []string) CommandResult {
 	}
 
 	return Result(Integer(int(seconds)))
+}
+
+func Persist(c *Client, args []string) CommandResult {
+	// Remove the existing timeout on key, turning the key from volatile (a key with an expire set) to persistent (a key that will never expire as no timeout is associated).
+
+	key := args[0]
+
+	obj, e := c.db.lookupKey(key)
+
+	rVal := 0
+
+	// return int 0 if doenst exist or no timeout
+	// 1 if persisted
+
+	if e && obj != nil {
+		obj.setExprMs(-1)
+		rVal = 1
+	}
+
+	return Result(Integer(rVal))
 }
 
 func Del(c *Client, args []string) CommandResult {
@@ -129,6 +150,46 @@ func Type(c *Client, args []string) CommandResult {
 }
 
 // RDB based function
-func Dump() {
+func Dump(c *Client, args []string) CommandResult {
 
+	// value stored at key in a Redis-specific format and return it to the user. The returned value can be synthesized back into a Redis key using the RESTORE command
+	/* It contains a 64-bit checksum that is used to make sure errors will be detected. The RESTORE command makes sure to check the checksum before synthesizing a key using the serialized value.
+	Values are encoded in the same format used by RDB.
+	An RDB version is encoded inside the serialized value, so that different Redis versions with incompatible RDB formats will refuse to process the serialized value.
+	*/
+	return Failed(Error("not implemented yet"))
+
+}
+
+func Restore(c *Client, args []string) CommandResult {
+	/*
+	   RESTORE key ttl serialized-value [REPLACE] [ABSTTL]
+
+	   	[IDLETIME seconds] [FREQ frequency]
+	*/
+	return Failed(Error("not implemented yet"))
+}
+
+func ObjCommand(c *Client, args []string) CommandResult {
+	cmdType, key := args[0], args[1]
+
+	obj, e := c.db.lookupKey(key)
+
+	if !e {
+		return Result(Null())
+	}
+
+	switch cmdType {
+	case "ENCODING":
+		enc := obj.encoding
+		return Result(BulkString(enc.StrRep()))
+	case "FREQ":
+	case "IDLETIME":
+		// time in seconds since the last access to the value stored at key.
+
+	case "REFCOUNT":
+		// reference count of the stored at key... ?
+	}
+
+	return Failed(wrongArgs("COMMAND"))
 }

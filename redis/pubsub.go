@@ -7,31 +7,45 @@ import (
 type PubSubServer struct {
 	channels  map[string]map[*Client]struct{}
 	connCount map[*Client]int
-	mu        *sync.Mutex
+	mu        sync.Mutex
+	stats     PubsubStats
+}
+type PubsubStats struct {
+	pubsub_channels uint64
+	pubsub_clients  uint64
 }
 
 // client pointer vs... hmmm
-func registerPubsubCommands(sh *SpecHandler) {
-	pubsubRegistry := map[string]CommandSpec{
+func registerPubsubCommands(sh *CommandTable) {
+	pubsubRegistry := map[string]Command{
 		"SUBSCRIBE": {
-			handler: Subscribe,
-			arity:   1,
-			group:   PubsubGroup,
-			flags:   CmdAllowedInPubsub & CmdNoMulti,
+			Handler: Subscribe,
+			Arity:   1,
+			Group:   PubsubGroup,
+			Flags:   CmdAllowedInPubsub & CmdNoMulti,
 		}, "UNSUBSCRIBE": {
-			handler: Unsubscribe,
-			arity:   1,
-			group:   PubsubGroup,
-			flags:   CmdAllowedInPubsub & CmdNoMulti,
+			Handler: Unsubscribe,
+			Arity:   1,
+			Group:   PubsubGroup,
+			Flags:   CmdAllowedInPubsub & CmdNoMulti,
 		},
 		"PUBLISH": {
-			handler: Publish,
-			arity:   2,
-			group:   PubsubGroup,
+			Handler: Publish,
+			Arity:   2,
+			Group:   PubsubGroup,
 		},
 	}
 
 	sh.registerCommandSpecs(pubsubRegistry)
+}
+
+func NewPubsubServer() *PubSubServer {
+	return &PubSubServer{
+		channels:  make(map[string]map[*Client]struct{}),
+		connCount: make(map[*Client]int),
+		mu:        sync.Mutex{},
+	}
+
 }
 
 func (ps *PubSubServer) disconnClient(client *Client) int {

@@ -1,149 +1,228 @@
 package redis
 
-func registerTstringCommands(sh *SpecHandler) {
+func registerTstringCommands(sh *CommandTable) {
 
-	specMap := map[string]CommandSpec{
+	specMap := map[string]Command{
 		"GET": {
-			arity:   1,
-			flags:   CmdRead,
-			handler: Get,
+			Arity:   1,
+			Flags:   CmdRead,
+			Handler: Get,
 		},
 		"SET": {
-			arity:   -2,
-			flags:   CmdWrite,
-			handler: Set,
+			Arity:   -2,
+			Flags:   CmdWrite,
+			Handler: Set,
 		},
 		"MGET": {
-			arity:   -1,
-			flags:   CmdRead,
-			handler: MGet,
+			Arity:   -1,
+			Flags:   CmdRead,
+			Handler: MGet,
 		},
 
 		"MSET": {
-			arity:   -2,
-			flags:   CmdWrite,
-			handler: MSet,
+			Arity:   -2,
+			Flags:   CmdWrite,
+			Handler: MSet,
 		},
 		"INCR": {
-			arity:   1,
-			handler: Incr,
-			flags:   CmdWrite,
+			Arity:   1,
+			Handler: Incr,
+			Flags:   CmdWrite,
 		},
 		"DECR": {
-			arity:   1,
-			handler: Decr,
-			flags:   CmdWrite,
+			Arity:   1,
+			Handler: Decr,
+			Flags:   CmdWrite,
 		},
 
 		"INCRBY": {
-			arity:   2,
-			handler: IncrBy,
-			flags:   CmdWrite,
+			Arity:   2,
+			Handler: IncrBy,
+			Flags:   CmdWrite,
 		},
 
 		"DECRBY": {
-			arity:   2,
-			handler: DecrBy,
-			flags:   CmdWrite,
+			Arity:   2,
+			Handler: DecrBy,
+			Flags:   CmdWrite,
 		},
 		"STRLEN": {
-			arity:   1,
-			handler: StrLen,
-			group:   StringGroup,
-			flags:   CmdRead,
+			Arity:   1,
+			Handler: StrLen,
+			Group:   StringGroup,
+			Flags:   CmdRead,
 		},
 		"LCS": {
-			arity:   -2,
-			handler: Lcs,
-			flags:   CmdRead,
+			Arity:   -2,
+			Handler: Lcs,
+			Flags:   CmdRead,
 		},
 	}
 
 	for k, v := range specMap {
-		v.group = StringGroup
-		v.name = k
+		v.Group = StringGroup
+		v.Name = k
 		specMap[k] = v
 	}
 
 	sh.registerCommandSpecs(specMap)
 }
 
-func registerTHashCommandSpec(sh *SpecHandler) {
+func registerTHashCommandSpec(sh *CommandTable) {
 
-	hSpecs := map[string]CommandSpec{
+	hSpecs := map[string]Command{
 		"HSET": {
-			arity:   -3,
-			flags:   CmdWrite,
-			handler: HSet,
+			Arity:   -3,
+			Flags:   CmdWrite,
+			Handler: HSet,
 		},
 
 		"HDEL": {
-			arity:   2,
-			flags:   CmdWrite,
-			handler: HDel},
+			Arity:   2,
+			Flags:   CmdWrite,
+			Handler: HDel},
 		"HGETALL": {
-			arity:   1,
-			flags:   CmdRead,
-			handler: HGetAll,
+			Arity:   1,
+			Flags:   CmdRead,
+			Handler: HGetAll,
 		},
 		"HEXISTS": {
-			arity:   2,
-			flags:   CmdRead,
-			handler: HExists,
+			Arity:   2,
+			Flags:   CmdRead,
+			Handler: HExists,
 		},
 	}
 
 	for k, v := range hSpecs {
-		v.group = HashGroup
-		v.name = k
+		v.Group = HashGroup
+		v.Name = k
 		hSpecs[k] = v
 	}
 	sh.registerCommandSpecs(hSpecs)
 
 }
 
-func registerSetCSpec(sh *SpecHandler) {
+func registerSetCSpec(sh *CommandTable) {
 
-	setSpecs := map[string]CommandSpec{
+	setSpecs := map[string]Command{
 
 		"SADD": {
-			handler: SAdd,
-			group:   SetGroup,
-			flags:   CmdWrite,
-			arity:   -2,
+			Handler: SAdd,
+			Group:   SetGroup,
+			Flags:   CmdWrite,
+			Arity:   -2,
 		},
 		"SCARD": {
-			handler: SCard,
-			group:   SetGroup,
-			flags:   CmdRead,
-			arity:   1,
+			Handler: SCard,
+			Group:   SetGroup,
+			Flags:   CmdRead,
+			Arity:   1,
 		},
 		"SREM": {
-			handler: SRem,
-			group:   SetGroup,
-			flags:   CmdWrite,
-			arity:   -2,
+			Handler: SRem,
+			Group:   SetGroup,
+			Flags:   CmdWrite,
+			Arity:   -2,
 		},
 		"SMISMEMBER": {
-			handler: SMIsMem,
-			group:   SetGroup,
-			flags:   CmdRead,
-			arity:   -2,
+			Handler: SMIsMem,
+			Group:   SetGroup,
+			Flags:   CmdRead,
+			Arity:   -2,
 		},
 		"SISMEMBER": {
-			handler: SIsMem,
-			group:   SetGroup,
-			flags:   CmdRead,
-			arity:   2,
+			Handler: SIsMem,
+			Group:   SetGroup,
+			Flags:   CmdRead,
+			Arity:   2,
 		},
 		"SDIFF": {
-			handler: SDiff,
-			arity:   -1,
-			group:   SetGroup,
-			flags:   CmdRead,
+			Handler: SDiff,
+			Arity:   -1,
+			Group:   SetGroup,
+			Flags:   CmdRead,
 		},
 	}
 
 	sh.registerCommandSpecs(setSpecs)
 
+}
+
+func registerGenericCommands(sh *CommandTable) {
+	sh.registerCommandSpecs(map[string]Command{
+		"COPY": {
+			Arity:   -2,
+			Handler: Copy,
+			Flags:   CmdWrite,
+			Group:   GenericGroup,
+		},
+		"EXISTS": {
+			Handler: Exists,
+			Arity:   -1,
+			Group:   GenericGroup,
+			Flags:   CmdRead,
+		},
+		"TYPE": {
+			Arity:   1,
+			Group:   GenericGroup,
+			Flags:   CmdRead,
+			Handler: Type,
+		},
+		"TTL": {
+			Arity:   1,
+			Group:   GenericGroup,
+			Flags:   CmdWrite,
+			Handler: Ttl,
+		},
+		"PERSIST": {
+			Arity:   1,
+			Group:   GenericGroup,
+			Handler: Persist,
+			Flags:   CmdWrite,
+		},
+		"DEL": {
+			Arity:   -1,
+			Group:   GenericGroup,
+			Flags:   CmdWrite,
+			Handler: Del,
+		},
+		"OBJECT": {
+			Arity:   2,
+			Handler: ObjCommand,
+			Flags:   CmdRead,
+			Group:   GenericGroup,
+		},
+	})
+
+}
+
+// ! if we have all of the sub commands under a single command will be treated as same in logging
+func registerMangementSpec(sh *CommandTable) {
+	mSpecs := map[string]Command{
+
+		"INFO": {
+			Handler: Info,
+			Group:   ManagementGroup,
+			Flags:   CmdRead,
+			Arity:   -1,
+		},
+	}
+
+	for k, v := range mSpecs {
+		v.Group = ManagementGroup
+		v.Name = k
+		mSpecs[k] = v
+	}
+
+	sh.registerCommandSpecs(mSpecs)
+}
+
+func (sh *CommandTable) RegisterFullCommandTable() {
+	registerConnectionCommands(sh)
+	registerGenericCommands(sh)
+	registerTransactionSpec(sh)
+	registerPubsubCommands(sh)
+	registerTHashCommandSpec(sh)
+	registerTstringCommands(sh)
+	registerSetCSpec(sh)
 }
