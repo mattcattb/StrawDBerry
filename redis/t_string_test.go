@@ -1,6 +1,9 @@
 package redis
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func newStringCommandTestClient() *Client {
 	db := NewDb()
@@ -96,5 +99,42 @@ func TestStringCommandMGetPreservesOrderAndMissingValues(t *testing.T) {
 	third, ok := values[2].BulkString()
 	if !ok || third != "three" {
 		t.Fatalf("values[2] = %q, %v; want %q, true", third, ok, "three")
+	}
+}
+
+func TestStringCommandSetStoresNoExpirationByDefault(t *testing.T) {
+	c := newStringCommandTestClient()
+
+	res := Set(c, []string{"name", "mat"})
+	if res.Failed {
+		t.Fatalf("SET failed: %#v", res.Reply)
+	}
+
+	obj, exists := c.db.lookupKey("name")
+	if !exists {
+		t.Fatal("expected key to exist")
+	}
+	if obj.expiresAt != noExpiration {
+		t.Fatalf("expiresAt = %d, want %d", obj.expiresAt, noExpiration)
+	}
+}
+
+func TestStringCommandSetPxStoresUnixMsExpiration(t *testing.T) {
+	c := newStringCommandTestClient()
+	before := time.Now().UnixMilli()
+
+	res := Set(c, []string{"name", "mat", "PX", "1000"})
+	if res.Failed {
+		t.Fatalf("SET PX failed: %#v", res.Reply)
+	}
+
+	obj, exists := c.db.lookupKey("name")
+	if !exists {
+		t.Fatal("expected key to exist")
+	}
+
+	after := time.Now().UnixMilli()
+	if obj.expiresAt < before+1000 || obj.expiresAt > after+1000 {
+		t.Fatalf("expiresAt = %d, want between %d and %d", obj.expiresAt, before+1000, after+1000)
 	}
 }

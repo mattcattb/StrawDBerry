@@ -18,20 +18,31 @@ func tryParseInt(val string) (int, bool) {
 
 }
 
+func tryParseInt64(val string) (int64, bool) {
+	n, err := strconv.ParseInt(val, 10, 64)
+	if err != nil {
+		return 0, false
+	}
+
+	return n, true
+}
+
 func newStringObject(value string) *RedisObject {
 
 	if n, ok := tryParseInt(value); ok {
 		return &RedisObject{
-			typ:      StringObject,
-			encoding: EncodingInt,
-			ptr:      intStringPayload(n),
+			typ:       StringObject,
+			encoding:  EncodingInt,
+			ptr:       intStringPayload(n),
+			expiresAt: noExpiration,
 		}
 	}
 
 	return &RedisObject{
-		typ:      StringObject,
-		encoding: EncodingRaw,
-		ptr:      rawStringPayload(value),
+		typ:       StringObject,
+		encoding:  EncodingRaw,
+		ptr:       rawStringPayload(value),
+		expiresAt: noExpiration,
 	}
 }
 
@@ -74,13 +85,13 @@ type setOptions struct {
 	nx  bool
 	xx  bool
 	get bool
-	ex  *int // expire in s
-	px  *int // expire in ms
+	ex  *int64 // expire in s
+	px  *int64 // expire in ms
 
 	keepTtl bool
 	// ex expire seconds, px expire ms
-	xAt  *int // expire at s
-	pXAt *int // expire at ms
+	xAt  *int64 // expire at s
+	pXAt *int64 // expire at ms
 
 }
 
@@ -103,13 +114,13 @@ func parseOptionalArgs(args []string) (so setOptions, err error) {
 			so.xx = true
 
 		case "EX":
-			if i >= argLen {
+			if i+1 >= argLen {
 				// we dont have an extra one here
 				return so, ErrWrongArgs
 			}
 
 			secStr := args[i+1]
-			secVal, ok := tryParseInt(secStr)
+			secVal, ok := tryParseInt64(secStr)
 			if !ok {
 				return so, ErrInvalidEncoding
 			}
@@ -118,13 +129,13 @@ func parseOptionalArgs(args []string) (so setOptions, err error) {
 			i++
 
 		case "PX":
-			if i >= argLen {
+			if i+1 >= argLen {
 				// we dont have an extra one here
 				return so, ErrWrongArgs
 			}
 
 			msStr := args[i+1]
-			msVal, ok := tryParseInt(msStr)
+			msVal, ok := tryParseInt64(msStr)
 			if !ok {
 				return so, ErrInvalidEncoding
 			}
@@ -145,7 +156,7 @@ func Set(c *Client, args []string) CommandResult {
 	c.db.mu.Lock()
 	defer c.db.mu.Unlock()
 
-	expiresAtMs := -1
+	expiresAt := noExpiration
 
 	options, err := parseOptionalArgs(args)
 
@@ -154,17 +165,14 @@ func Set(c *Client, args []string) CommandResult {
 	}
 
 	if options.ex != nil {
-		expiresAtMs = *options.ex * 1000
+		expiresAt = time.Now().UnixMilli() + (*options.ex * 1000)
 	}
 	if options.px != nil {
-		expiresAtMs = *options.px
+		expiresAt = time.Now().UnixMilli() + *options.px
 	}
 
 	newObj := newStringObject(val)
-
-	if expiresAtMs != -1 {
-		newObj.expiresAt = time.Now().Add(time.Millisecond * time.Duration(expiresAtMs))
-	}
+	newObj.expiresAt = expiresAt
 
 	shouldSet := true
 

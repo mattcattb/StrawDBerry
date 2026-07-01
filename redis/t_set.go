@@ -36,9 +36,10 @@ func registerSetCSpec(sh *SpecHandler) {
 
 func newSetObj() *RedisObject {
 	return &RedisObject{
-		typ:      SetObject,
-		encoding: EncodingSetMap,
-		ptr:      setMapPayload{},
+		typ:       SetObject,
+		encoding:  EncodingSetMap,
+		ptr:       setMapPayload{},
+		expiresAt: noExpiration,
 	}
 }
 

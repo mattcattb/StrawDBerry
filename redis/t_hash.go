@@ -36,9 +36,10 @@ func registerTHashCommandSpec(sh *SpecHandler) {
 
 func newHashRObject() *RedisObject {
 	return &RedisObject{
-		typ:      HashObject,
-		encoding: EncodingHashMap,
-		ptr:      hashMapPayload(map[string]string{}),
+		typ:       HashObject,
+		encoding:  EncodingHashMap,
+		ptr:       hashMapPayload(map[string]string{}),
+		expiresAt: noExpiration,
 	}
 }
 

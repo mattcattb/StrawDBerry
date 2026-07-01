@@ -1,9 +1,5 @@
 package redis
 
-import (
-	"time"
-)
-
 func registerGenericCommands(sh *SpecHandler) {
 	sh.registerCommandSpecs(map[string]CommandSpec{
 		"EXISTS": {
@@ -75,18 +71,14 @@ func Ttl(c *Client, args []string) CommandResult {
 		return Result(Integer(-2))
 	}
 
-	if obj.expiresAt.IsZero() {
-		return Result(Integer(-1))
-	}
-
-	seconds := int(time.Until(obj.expiresAt).Seconds())
-	if seconds < 0 {
+	seconds := obj.ttlForObject()
+	if seconds == -2 {
 		delete(c.db.dict, key)
 		c.server.dirty += 1
 		return Result(Integer(-2))
 	}
 
-	return Result(Integer(seconds))
+	return Result(Integer(int(seconds)))
 }
 
 func Del(c *Client, args []string) CommandResult {

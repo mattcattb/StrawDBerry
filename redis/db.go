@@ -20,7 +20,7 @@ func (db *RedisDb) lookupKey(key string) (*RedisObject, bool) {
 		return nil, false
 	}
 
-	if obj.expired(time.Now()) {
+	if obj.expired() {
 		delete(db.dict, key)
 		return nil, false
 	}
@@ -41,19 +41,20 @@ func (db *RedisDb) deleteKey(key string) bool {
 	delete(db.dict, key)
 	return true
 }
-func (o *RedisObject) expired(now time.Time) bool {
-	return !o.expiresAt.IsZero() && now.After(o.expiresAt)
-
+func (o *RedisObject) expired() bool {
+	now := time.Now().UnixMilli()
+	return o.expiresAt != noExpiration && o.expiresAt <= now
 }
 
-func (obj *RedisObject) ttlForObject(now time.Time) int {
-	if obj.expiresAt.IsZero() {
+func (obj *RedisObject) ttlForObject() int64 {
+	if obj.expiresAt == noExpiration {
 		return -1
 	}
 
-	if obj.expired(now) {
+	now := time.Now().UnixMilli()
+	if obj.expiresAt <= now {
 		return -2
 	}
 
-	return int(time.Until(obj.expiresAt).Seconds())
+	return (obj.expiresAt - now) / 1000
 }
