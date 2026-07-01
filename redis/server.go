@@ -5,6 +5,10 @@ import (
 	"net"
 )
 
+type SConfig struct {
+	maxmemory int64
+}
+
 type Server struct {
 	clients []*Client
 	ps      *PubSubServer

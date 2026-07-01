@@ -14,29 +14,6 @@ const (
 	HashObject
 )
 
-type ObjectEncoding uint8
-
-const (
-	EncodingRaw ObjectEncoding = iota
-	EncodingInt
-	EncodingHashMap
-	EncodingSetMap
-)
-
-type objectPayload interface {
-	objectPayload()
-}
-
-type rawStringPayload string
-type intStringPayload int
-type hashMapPayload map[string]string
-type setMapPayload map[string]struct{}
-
-func (rawStringPayload) objectPayload() {}
-func (intStringPayload) objectPayload() {}
-func (hashMapPayload) objectPayload()   {}
-func (setMapPayload) objectPayload()    {}
-
 type RedisObject struct {
 	typ       ObjectType
 	encoding  ObjectEncoding
@@ -74,21 +51,3 @@ func checkObjectType(obj *RedisObject, typ ObjectType) error {
 
 	return nil
 }
-
-/*
-func newStringObject(value string) *RedisObject {
-	if n, ok := tryParseInt(value); ok {
-		return &RedisObject{
-			typ:      StringObject,
-			encoding: EncodingInt,
-			ptr:      n,
-		}
-	}
-	return &RedisObject{
-		typ:      StringObject,
-		encoding: EncodingRaw,
-		ptr:      value,
-	}
-
-}
-*/

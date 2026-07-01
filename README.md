@@ -1,15 +1,36 @@
 # go-redis
 
-A small Redis-inspired server written in Go.
+My implementation of redis in golang from scratch.
 
 This is a learning project focused on the lower-level pieces: RESP parsing and writing, command execution, an in-memory keyspace, and basic persistence ideas. The code is still in progress and is not intended to be a production Redis replacement.
 
-Current areas of work:
+## Features
 
 - RESP protocol parsing and serialization
-- string and hash command handling
-- a shared in-memory keyspace for Redis-style objects
-- append-only persistence experiments
+- core string, hash, set, and list general commands
+- Multi, Exec, + Discard transactional commands
+- AOF memory persistance (log rewrite in progress)
+- Pubsub Publish, Subscribe and Unsubscribe with client pubsub blocking mode on subscriptions
+- General + Connection commmands
+
+## In Progress:
+
+- Pubsub \* channel mutli subscriptions
+- Zset commands
+- Blocking behaviors
+- AOF file rewrites
+- redis stream commands
+- memory management
+- lru caching for memory limits
+- Blocking commands + client behavior
+- commandstats?
+
+#### management
+
+- Info Command ()
+- Memory tracking + max memory
+- LRU caching
+- Hotkey Management (detection of high frequency "hotkeys")
 
 Run tests with:
 

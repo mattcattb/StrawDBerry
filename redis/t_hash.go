@@ -1,39 +1,5 @@
 package redis
 
-func registerTHashCommandSpec(sh *SpecHandler) {
-
-	hSpecs := map[string]CommandSpec{
-		"HSET": {
-			arity:   -3,
-			flags:   CmdWrite,
-			handler: HSet,
-		},
-
-		"HDEL": {
-			arity:   2,
-			flags:   CmdWrite,
-			handler: HDel},
-		"HGETALL": {
-			arity:   1,
-			flags:   CmdRead,
-			handler: HGetAll,
-		},
-		"HEXISTS": {
-			arity:   2,
-			flags:   CmdRead,
-			handler: HExists,
-		},
-	}
-
-	for k, v := range hSpecs {
-		v.group = HashGroup
-		v.name = k
-		hSpecs[k] = v
-	}
-	sh.registerCommandSpecs(hSpecs)
-
-}
-
 func newHashRObject() *RedisObject {
 	return &RedisObject{
 		typ:       HashObject,
@@ -63,21 +29,32 @@ func hashObjValue(obj *RedisObject) (map[string]string, error) {
 	return newMap, ErrInvalidEncoding
 }
 
-/*
 func hashTypeSet(obj *RedisObject, key, value string) (bool, error) {
-	obj.encoding = EncodingMap
 
 	hash, err := hashObjValue(obj)
 	if err != nil {
 		return false, err
 	}
 
+	_, exists := hash[key]
+	hash[key] = value
+
+	return exists, nil
 }
 
-func hashTypeGet(obj *RedisObject, field string) (string, bool, error)
-func hashTypeDel(obj *RedisObject, fields ...string) (deleted int, err error) {
+func hashTypeGet(obj *RedisObject, field string) (string, bool, error) {
+	hash, err := hashObjValue(obj)
+	if err != nil {
+		return "", false, err
+	}
 
-} */
+	val, exists := hash[field]
+
+	return val, exists, err
+}
+func hashTypeDel(obj *RedisObject, fields ...string) (deleted int, err error) {
+	return deleted, err
+}
 
 func HGet(c *Client, args []string) CommandResult {
 	// HGET key field

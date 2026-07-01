@@ -1,39 +1,5 @@
 package redis
 
-func registerSetCSpec(sh *SpecHandler) {
-
-	setSpecs := map[string]CommandSpec{
-
-		"SADD": {
-			handler: SAdd,
-			group:   SetGroup,
-			flags:   CmdWrite,
-			arity:   -2,
-		},
-		"SCARD": {
-			handler: SCard,
-			group:   SetGroup,
-			flags:   CmdRead,
-			arity:   1,
-		},
-		"SREM": {
-			handler: SRem,
-			group:   SetGroup,
-			flags:   CmdWrite,
-			arity:   -2,
-		},
-		"SISMEM": {
-			handler: SIsMem,
-			group:   SetGroup,
-			flags:   CmdWrite,
-			arity:   2,
-		},
-	}
-
-	sh.registerCommandSpecs(setSpecs)
-
-}
-
 func newSetObj() *RedisObject {
 	return &RedisObject{
 		typ:       SetObject,
@@ -149,9 +115,105 @@ func SCard(c *Client, args []string) CommandResult {
 }
 
 func SRem(c *Client, args []string) CommandResult {
-	return Failed(Error("ERR not implemented"))
+
+	key, members := args[0], args[1:]
+
+	c.db.mu.Lock()
+	defer c.db.mu.Unlock()
+	rObj, exists := c.db.lookupKey(key)
+
+	if !exists {
+		return Result(Integer(0))
+	}
+
+	n := 0
+
+	for _, m := range members {
+		del, err := setTypeDel(rObj, m)
+		if err != nil {
+			return Failed(wrongTypeError())
+		}
+
+		if del {
+			n += 1
+		}
+	}
+
+	return Result(Integer(0))
+}
+
+func SMIsMem(c *Client, args []string) CommandResult {
+
+	key, members := args[0], args[1:]
+
+	respValues := make([]Value, len(members))
+
+	c.db.mu.Lock()
+	defer c.db.mu.Unlock()
+	rObj, e := c.db.lookupKey(key)
+	for i, _ := range respValues {
+		respValues[i] = Integer(0)
+	}
+
+	if !e {
+		return Result(Array(respValues))
+	}
+
+	for i, m := range members {
+
+		exists, err := setTypeExists(rObj, m)
+
+		if err != nil {
+			return Failed(wrongTypeError())
+		}
+		n := 0
+		if exists {
+			n++
+		}
+
+		respValues[i] = Integer(n)
+
+	}
+	return Result(Array(respValues))
 }
 
 func SIsMem(c *Client, args []string) CommandResult {
-	return Failed(Error("ERR not implemented"))
+	key, member := args[0], args[1]
+
+	c.db.mu.Lock()
+	defer c.db.mu.Unlock()
+	rObj, e := c.db.lookupKey(key)
+
+	n := 0
+	if !e {
+		return Result(Integer(n))
+	}
+
+	exists, err := setTypeExists(rObj, member)
+
+	if err != nil {
+		return Failed(wrongTypeError())
+	}
+
+	if exists {
+		n++
+	}
+	return Result(Integer(n))
+}
+
+func SDiff(c *Client, args []string) CommandResult {
+
+	// diff set takes aSets and removes every item from the dKeys
+	aKey, dKeys := args[0], args[1:]
+
+	obj, exists := c.db.lookupKey(aKey)
+
+	if !exists {
+		// empty set beahviro here?
+	}
+
+	_ = obj
+	_ = dKeys
+
+	return Failed(Error("not yet implemented"))
 }

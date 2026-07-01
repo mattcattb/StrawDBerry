@@ -14,6 +14,8 @@ func NewDb() *RedisDb {
 	return &RedisDb{dict: map[string]*RedisObject{}}
 }
 
+// !
+
 func (db *RedisDb) lookupKey(key string) (*RedisObject, bool) {
 	obj := db.dict[key]
 	if obj == nil {
@@ -27,6 +29,8 @@ func (db *RedisDb) lookupKey(key string) (*RedisObject, bool) {
 
 	return obj, true
 }
+
+// do a memory check here?
 func (db *RedisDb) setKey(key string, obj *RedisObject) {
 	db.dict[key] = obj
 }

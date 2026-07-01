@@ -390,7 +390,7 @@ type lcsArgs struct {
 }
 
 func Lcs(c *Client, args []string) CommandResult {
-
+	// TODO
 	//The LCS command implements the longest common subsequence algorithm. Note that this is different than the longest common string algorithm, since matching characters in the string does not need to be contiguous.
 	// LCS key1 key2 [LEN] [IDX] [MINMATCHLEN min-match-len] [WITHMATCHLEN]
 	return Failed(SimpleError("not yet implemented"))

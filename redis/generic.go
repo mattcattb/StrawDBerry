@@ -127,3 +127,8 @@ func Type(c *Client, args []string) CommandResult {
 
 	return Failed(Error("Unknown type"))
 }
+
+// RDB based function
+func Dump() {
+
+}

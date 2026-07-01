@@ -138,3 +138,8 @@ type DummyAofLog struct {
 func (a *DummyAofLog) Append(v Value) error {
 	return nil
 }
+
+func (a *Aof) CompactLog(v Value) error {
+	// we need to do a few things...
+	return nil
+}
