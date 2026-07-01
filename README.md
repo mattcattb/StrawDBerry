@@ -15,6 +15,7 @@ This is a learning project focused on the lower-level pieces: RESP parsing and w
 
 ## In Progress:
 
+- AUTH
 - Pubsub \* channel mutli subscriptions
 - Zset commands
 - Blocking behaviors

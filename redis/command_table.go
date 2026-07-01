@@ -18,13 +18,12 @@ func (f CommandFlags) has(flag CommandFlags) bool {
 	return f&flag != 0
 }
 
-func (sh *CommandTable) registerCommandSpecs(specMap map[string]Command) {
-
-	for name, spec := range specMap {
+func (sh *CommandTable) registerGroup(group CommandGroup, table map[string]Command) {
+	for name, spec := range table {
 		spec.Name = name
+		spec.Group = group
 		sh.commands[name] = spec
 	}
-
 }
 
 func (sh *CommandTable) getCommand(command string) (Command, bool) {

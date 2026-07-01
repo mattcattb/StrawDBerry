@@ -129,24 +129,8 @@ func Type(c *Client, args []string) CommandResult {
 	if !exists {
 		return Result(SimpleString("none"))
 	}
-
-	switch ObjectType(obj.typ) {
-	case StringObject:
-		return Result(SimpleString("string"))
-
-	case ListObject:
-		return Result(SimpleString("list"))
-
-	case SetObject:
-		return Result(SimpleString("set"))
-	case ZSetObject:
-		return Result(SimpleString("zset"))
-
-	case HashObject:
-		return Result(SimpleString("hash"))
-	}
-
-	return Failed(Error("Unknown type"))
+	str := obj.typ.Str()
+	return Result(SimpleString(str))
 }
 
 // RDB based function
@@ -170,26 +154,33 @@ func Restore(c *Client, args []string) CommandResult {
 	return Failed(Error("not implemented yet"))
 }
 
-func ObjCommand(c *Client, args []string) CommandResult {
-	cmdType, key := args[0], args[1]
-
+func ObjectEncodingCmd(c *Client, args []string) CommandResult {
+	key := args[0]
 	obj, e := c.db.lookupKey(key)
-
 	if !e {
 		return Result(Null())
 	}
+	return Result(BulkString(obj.encoding.StrRep()))
+}
+func ObjFreqCmd(c *Client, args []string) CommandResult {
+	return Failed(Error("Not yet implemented"))
 
-	switch cmdType {
-	case "ENCODING":
-		enc := obj.encoding
-		return Result(BulkString(enc.StrRep()))
-	case "FREQ":
-	case "IDLETIME":
-		// time in seconds since the last access to the value stored at key.
+}
 
-	case "REFCOUNT":
-		// reference count of the stored at key... ?
-	}
+func ObjFreqIdleTime(c *Client, args []string) CommandResult {
+	return Failed(Error("Not yet implemented"))
 
-	return Failed(wrongArgs("COMMAND"))
+}
+
+func ObjRefcount(c *Client, args []string) CommandResult {
+	return Failed(Error("Not yet implemented"))
+
+}
+
+// ! async or sync here...!
+func FlushAll(c *Client, args []string) CommandResult {
+	// delete all keys
+	c.server.db.Flush()
+	return Result(SimpleString("OK"))
+
 }

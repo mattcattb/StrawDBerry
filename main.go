@@ -43,7 +43,7 @@ func main() {
 	sh := redis.NewCommandTable()
 
 	srv := redis.NewServer(db, aof, sh)
-	srv.RegisterAllCommandHandlers()
+	srv.RegisterCMDTable()
 	aof.ReplayAOF(redis.NewClient(nil, srv))
 
 	fmt.Println("Listening on port ", cfg.server.Addr)

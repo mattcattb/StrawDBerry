@@ -85,3 +85,11 @@ func (db *RedisDb) StatsSnapshot() DbStatsSnapshot {
 	return DbStatsSnapshot{DbStats: curStats, keys: uint64(keys), expires: 0}
 
 }
+
+func (db *RedisDb) Flush() {
+	// remove all keys
+
+	for k, _ := range db.dict {
+		db.deleteKey(k)
+	}
+}

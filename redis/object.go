@@ -14,6 +14,24 @@ const (
 	HashObject
 )
 
+func (o ObjectType) Str() string {
+	switch ObjectType(o) {
+	case StringObject:
+		return "string"
+	case ListObject:
+		return "list"
+	case SetObject:
+		return "set"
+	case ZSetObject:
+		return "zset"
+	case HashObject:
+		return "hash"
+	default:
+		return "UNKNOWN"
+	}
+
+}
+
 type RedisObject struct {
 	typ       ObjectType
 	encoding  ObjectEncoding

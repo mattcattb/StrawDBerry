@@ -26,6 +26,7 @@ type ServerStats struct {
 }
 
 type Server struct {
+	config  SConfig
 	clients map[*Client]struct{}
 	ps      *PubSubServer
 	aof     *Aof
@@ -47,8 +48,15 @@ func NewServer(db *RedisDb, aof *Aof, sh *CommandTable) *Server {
 
 }
 
-func (s *Server) RegisterAllCommandHandlers() {
-	s.sh.RegisterFullCommandTable()
+func (s *Server) RegisterCMDTable() {
+	s.sh.registerGroup(StringGroup, StringCmdTable)
+	s.sh.registerGroup(HashGroup, HashCmdTable)
+	s.sh.registerGroup(SetGroup, SetCmdTable)
+	s.sh.registerGroup(ManagementGroup, ManagementCMDTable)
+	s.sh.registerGroup(GenericGroup, GenericCMDTable)
+	s.sh.registerGroup(ConnGroup, ConnectionCmdTable)
+	s.sh.registerGroup(PubsubGroup, PubsubCmdTable)
+	s.sh.registerGroup(TxGroup, TxCmdTable)
 }
 
 /*
@@ -115,4 +123,8 @@ func (s *Server) SocketListenLoop(l net.Listener) {
 
 		go s.HandleConnection(conn)
 	}
+}
+
+func (s *Server) StatsSnapshot() {
+
 }

@@ -1,27 +1,5 @@
 package redis
 
-func registerTransactionSpec(cs *CommandTable) {
-	txSpec := map[string]Command{
-		"EXEC": {
-			Arity:   0,
-			Handler: Exec,
-			Group:   TxGroup,
-		},
-		"MULTI": {
-			Arity:   0,
-			Group:   TxGroup,
-			Handler: Multi,
-			Flags:   CmdNoMulti, // cannot call multi if in multi
-		},
-		"DISCARD": {
-			Arity:   0,
-			Group:   TxGroup,
-			Handler: Discard,
-		},
-	}
-	cs.registerCommandSpecs(txSpec)
-}
-
 func Exec(c *Client, args []string) CommandResult {
 
 	if c.mode != ModeTx {

@@ -16,28 +16,6 @@ type PubsubStats struct {
 }
 
 // client pointer vs... hmmm
-func registerPubsubCommands(sh *CommandTable) {
-	pubsubRegistry := map[string]Command{
-		"SUBSCRIBE": {
-			Handler: Subscribe,
-			Arity:   1,
-			Group:   PubsubGroup,
-			Flags:   CmdAllowedInPubsub & CmdNoMulti,
-		}, "UNSUBSCRIBE": {
-			Handler: Unsubscribe,
-			Arity:   1,
-			Group:   PubsubGroup,
-			Flags:   CmdAllowedInPubsub & CmdNoMulti,
-		},
-		"PUBLISH": {
-			Handler: Publish,
-			Arity:   2,
-			Group:   PubsubGroup,
-		},
-	}
-
-	sh.registerCommandSpecs(pubsubRegistry)
-}
 
 func NewPubsubServer() *PubSubServer {
 	return &PubSubServer{
