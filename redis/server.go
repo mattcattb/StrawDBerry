@@ -80,7 +80,7 @@ func (s *Server) HandleConnection(conn net.Conn) {
 		if err != nil {
 			log.Printf(`read error %s: %#v`, conn.RemoteAddr(), req)
 			s.sStats.readErrors++
-			continue
+			return
 		}
 
 		log.Printf("read request %q", string(req.Marshal()))

@@ -251,3 +251,6 @@ var TxCmdTable map[string]Command = map[string]Command{
 		Handler: Discard,
 	},
 }
+
+// Zset commands are still in progress. Keep them out of the default command
+// table until the ranking/range implementation is complete.

@@ -1,0 +1,4 @@
+.git
+go-redis
+appendonly.aof
+data

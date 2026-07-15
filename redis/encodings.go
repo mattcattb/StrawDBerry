@@ -1,5 +1,7 @@
 package redis
 
+import "github.com/huandu/skiplist"
+
 type ObjectEncoding uint8
 
 const (
@@ -7,6 +9,7 @@ const (
 	EncodingInt
 	EncodingHashMap
 	EncodingSetMap
+	EncodingSkipList
 )
 
 func (e ObjectEncoding) StrRep() string {
@@ -19,6 +22,9 @@ func (e ObjectEncoding) StrRep() string {
 		return "EncodingHashMap"
 	case EncodingSetMap:
 		return "EncodingSetMap"
+
+	case EncodingSkipList:
+		return "EncodingSkipList"
 	default:
 		return "UNKNOWN"
 	}
@@ -32,8 +38,13 @@ type rawStringPayload string
 type intStringPayload int
 type hashMapPayload map[string]string
 type setMapPayload map[string]struct{}
+type skipListPayload struct {
+	scores map[string]int
+	sl     *skiplist.SkipList
+}
 
 func (rawStringPayload) objectPayload() {}
 func (intStringPayload) objectPayload() {}
 func (hashMapPayload) objectPayload()   {}
 func (setMapPayload) objectPayload()    {}
+func (skipListPayload) objectPayload()  {}

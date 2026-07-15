@@ -23,12 +23,14 @@ type Aof struct {
 	mu       sync.Mutex
 	fsPolicy FsyncPolicy
 	ticker   *time.Ticker
+	config   AofConfig
 }
 
 type AofConfig struct {
-	DataDir       string
-	FPolicy       FsyncPolicy
-	SnapshotEvery time.Duration
+	Enabled       bool
+	FilePath      string
+	FSyncPolicy   FsyncPolicy
+	FsyncInterval time.Duration
 }
 
 /*
@@ -41,15 +43,15 @@ type AofConfig struct {
 // consider persistnace interface
 
 func OpenAof(config AofConfig) (a *Aof, err error) {
-	f, err := os.OpenFile(config.DataDir, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(config.FilePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
 		return nil, err
 	}
 	writer := bufio.NewWriter(f)
-	a = &Aof{file: f, writer: writer, fsPolicy: config.FPolicy}
+	a = &Aof{file: f, writer: writer, fsPolicy: config.FSyncPolicy}
 
 	if a.fsPolicy == FsEverySecond {
-		a.startFsyncInterval(config.SnapshotEvery)
+		a.startFsyncInterval(config.FsyncInterval)
 	}
 
 	return a, nil

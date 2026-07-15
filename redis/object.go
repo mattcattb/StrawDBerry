@@ -96,7 +96,3 @@ func checkObjectType(obj *RedisObject, typ ObjectType) error {
 
 	return nil
 }
-
-func serializeObj(obj *RedisObject) (string, error)
-
-func restoreObj(hash string) (RedisObject, error)

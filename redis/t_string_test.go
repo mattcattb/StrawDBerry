@@ -9,7 +9,7 @@ func newStringCommandTestClient() *Client {
 	db := NewDb()
 	server := NewServer(db, nil, NewCommandTable())
 
-	server.RegisterAllCommandHandlers()
+	server.RegisterCMDTable()
 
 	return &Client{
 		server: server,

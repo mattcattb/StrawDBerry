@@ -64,7 +64,7 @@ func HGet(c *Client, args []string) CommandResult {
 	c.db.mu.Lock()
 	defer c.db.mu.Unlock()
 
-	obj, exists := c.db.lookupKey(key)
+	obj, exists := c.db.lookupKeyLocked(key)
 
 	if !exists {
 		return Result(Null())
@@ -98,7 +98,7 @@ func HSet(c *Client, args []string) CommandResult {
 
 	setCount := 0
 
-	obj, exists := c.db.lookupKey(key)
+	obj, exists := c.db.lookupKeyLocked(key)
 
 	if !exists {
 		obj = newHashRObject()
@@ -118,7 +118,7 @@ func HSet(c *Client, args []string) CommandResult {
 
 	obj.ptr = hashMapPayload(hashObj)
 
-	c.db.setKey(key, obj)
+	c.db.setKeyLocked(key, obj)
 	c.server.dirty += 1
 	return Result(Integer(setCount))
 
@@ -131,7 +131,7 @@ func HDel(c *Client, args []string) CommandResult {
 	c.db.mu.Lock()
 	defer c.db.mu.Unlock()
 
-	obj, exists := c.db.lookupKey(key)
+	obj, exists := c.db.lookupKeyLocked(key)
 
 	if !exists {
 		return Result(Integer(0))
@@ -170,7 +170,7 @@ func HGetAll(c *Client, args []string) CommandResult {
 	c.db.mu.Lock()
 	defer c.db.mu.Unlock()
 
-	obj, exists := c.db.lookupKey(key)
+	obj, exists := c.db.lookupKeyLocked(key)
 
 	if !exists {
 		return Result(Array([]Value{}))
