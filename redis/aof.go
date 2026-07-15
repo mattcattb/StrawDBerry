@@ -2,6 +2,8 @@ package redis
 
 import (
 	"bufio"
+	"errors"
+	"io"
 	"os"
 	"sync"
 	"time"
@@ -43,12 +45,12 @@ type AofConfig struct {
 // consider persistnace interface
 
 func OpenAof(config AofConfig) (a *Aof, err error) {
-	f, err := os.OpenFile(config.FilePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(config.FilePath, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0644)
 	if err != nil {
 		return nil, err
 	}
 	writer := bufio.NewWriter(f)
-	a = &Aof{file: f, writer: writer, fsPolicy: config.FSyncPolicy}
+	a = &Aof{file: f, writer: writer, fsPolicy: config.FSyncPolicy, config: config}
 
 	if a.fsPolicy == FsEverySecond {
 		a.startFsyncInterval(config.FsyncInterval)
@@ -123,15 +125,15 @@ func (a *Aof) ReplayAOF(executor *Client) error {
 	for {
 		v, err := resp.Read()
 		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
 			return err
 		}
 
 		_ = executor.HandleCommand(v)
 		// uhhhh uhhh uhhh hmmmm
 	}
-
-	return nil
-
 }
 
 type DummyAofLog struct {
