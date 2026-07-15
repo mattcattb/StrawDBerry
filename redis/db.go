@@ -31,6 +31,10 @@ func NewDb() *RedisDb {
 func (db *RedisDb) lookupKey(key string) (*RedisObject, bool) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
+	return db.lookupKeyLocked(key)
+}
+
+func (db *RedisDb) lookupKeyLocked(key string) (*RedisObject, bool) {
 	obj := db.dict[key]
 	if obj == nil {
 		// key miss
@@ -54,13 +58,20 @@ func (db *RedisDb) lookupKey(key string) (*RedisObject, bool) {
 func (db *RedisDb) setKey(key string, obj *RedisObject) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
+	db.setKeyLocked(key, obj)
+}
+
+func (db *RedisDb) setKeyLocked(key string, obj *RedisObject) {
 	db.dict[key] = obj
 }
 func (db *RedisDb) deleteKey(key string) bool {
 
 	db.mu.Lock()
 	defer db.mu.Unlock()
+	return db.deleteKeyLocked(key)
+}
 
+func (db *RedisDb) deleteKeyLocked(key string) bool {
 	obj := db.dict[key]
 
 	if obj == nil {
@@ -89,7 +100,10 @@ func (db *RedisDb) StatsSnapshot() DbStatsSnapshot {
 func (db *RedisDb) Flush() {
 	// remove all keys
 
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
 	for k, _ := range db.dict {
-		db.deleteKey(k)
+		db.deleteKeyLocked(k)
 	}
 }

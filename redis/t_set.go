@@ -76,11 +76,11 @@ func SAdd(c *Client, args []string) CommandResult {
 
 	c.db.mu.Lock()
 	defer c.db.mu.Unlock()
-	obj, exists := c.db.lookupKey(key)
+	obj, exists := c.db.lookupKeyLocked(key)
 
 	if !exists {
 		obj = newSetObj()
-		c.db.setKey(key, obj)
+		c.db.setKeyLocked(key, obj)
 	}
 
 	added, err := setTypeAdd(obj, members...)
@@ -100,7 +100,7 @@ func SCard(c *Client, args []string) CommandResult {
 	c.db.mu.Lock()
 	defer c.db.mu.Unlock()
 
-	obj, exists := c.db.lookupKey(key)
+	obj, exists := c.db.lookupKeyLocked(key)
 
 	if !exists {
 		return Result(Integer(0))
@@ -120,7 +120,7 @@ func SRem(c *Client, args []string) CommandResult {
 
 	c.db.mu.Lock()
 	defer c.db.mu.Unlock()
-	rObj, exists := c.db.lookupKey(key)
+	rObj, exists := c.db.lookupKeyLocked(key)
 
 	if !exists {
 		return Result(Integer(0))
@@ -150,7 +150,7 @@ func SMIsMem(c *Client, args []string) CommandResult {
 
 	c.db.mu.Lock()
 	defer c.db.mu.Unlock()
-	rObj, e := c.db.lookupKey(key)
+	rObj, e := c.db.lookupKeyLocked(key)
 	for i, _ := range respValues {
 		respValues[i] = Integer(0)
 	}
@@ -182,7 +182,7 @@ func SIsMem(c *Client, args []string) CommandResult {
 
 	c.db.mu.Lock()
 	defer c.db.mu.Unlock()
-	rObj, e := c.db.lookupKey(key)
+	rObj, e := c.db.lookupKeyLocked(key)
 
 	n := 0
 	if !e {

@@ -19,9 +19,9 @@ type Config struct {
 func defaultConfig() Config {
 	return Config{
 		aof: redis.AofConfig{
-			DataDir:       "appendonly.aof",
-			FPolicy:       redis.FsAlways,
-			SnapshotEvery: time.Second,
+			FilePath:      "appendonly.aof",
+			FSyncPolicy:   redis.FsAlways,
+			FsyncInterval: time.Second,
 		},
 		server: ServerConfig{Addr: ":6479"},
 	}
@@ -56,5 +56,5 @@ func main() {
 		return
 	}
 
-	go srv.SocketListenLoop(l)
+	srv.SocketListenLoop(l)
 }

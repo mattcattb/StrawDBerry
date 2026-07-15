@@ -178,20 +178,20 @@ func Set(c *Client, args []string) CommandResult {
 
 	if options.xx {
 		// set if exists
-		if _, exists := c.db.lookupKey(key); !exists {
+		if _, exists := c.db.lookupKeyLocked(key); !exists {
 			shouldSet = false
 		}
 
 	} else if options.nx {
 		// set if doesnt exist
 
-		if _, exists := c.db.lookupKey(key); exists {
+		if _, exists := c.db.lookupKeyLocked(key); exists {
 			shouldSet = false
 		}
 	}
 
 	if shouldSet {
-		c.db.setKey(key, newObj)
+		c.db.setKeyLocked(key, newObj)
 		c.server.dirty += 1
 		return Result(SimpleString("OK"))
 	}
@@ -286,7 +286,7 @@ func deltaStrValue(c *Client, key string, delta int) (int, error) {
 	c.db.mu.Lock()
 	defer c.db.mu.Unlock()
 
-	curObj, _ := c.db.lookupKey(key)
+	curObj, _ := c.db.lookupKeyLocked(key)
 
 	value := delta
 
@@ -307,7 +307,7 @@ func deltaStrValue(c *Client, key string, delta int) (int, error) {
 
 		setStringObjectValue(curObj, strconv.Itoa(value))
 	} else {
-		c.db.setKey(key, newStringObject(strconv.Itoa(value)))
+		c.db.setKeyLocked(key, newStringObject(strconv.Itoa(value)))
 	}
 
 	return value, nil
@@ -353,7 +353,7 @@ func MSet(c *Client, args []string) CommandResult {
 
 	for _, pair := range kvPairs {
 		key, val := pair[0], pair[1]
-		c.db.setKey(key, newStringObject(val))
+		c.db.setKeyLocked(key, newStringObject(val))
 	}
 
 	c.server.dirty += 1
@@ -367,7 +367,7 @@ func StrLen(c *Client, args []string) CommandResult {
 	c.db.mu.Lock()
 	defer c.db.mu.Unlock()
 
-	obj, exists := c.db.lookupKey(key)
+	obj, exists := c.db.lookupKeyLocked(key)
 
 	if !exists {
 		return Result(Integer(0))
