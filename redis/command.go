@@ -32,11 +32,18 @@ const (
 )
 
 type Command struct {
-	Name    string
-	Arity   int // + is exact, negative is min
-	Handler func(*Client, []string) CommandResult
-	Group   CommandGroup
-	Flags   CommandFlags
+	Name        string
+	Arity       int // + is exact, negative is min
+	Handler     func(*Client, []string) CommandResult
+	Group       CommandGroup
+	Flags       CommandFlags
+	subcommands map[string]Command
+}
+
+type ResolvedCommand struct {
+	Name string
+	Spec Command
+	Args []string
 }
 
 type CommandResult struct {
@@ -52,24 +59,25 @@ func Failed(reply Value) CommandResult {
 	return CommandResult{Reply: reply, Failed: true}
 }
 
-func ParseCommand(v Value) (string, []string, error) {
+// turns to the array
+func ParseCommand(v Value) ([]string, error) {
 	values, ok := v.Array()
 	if !ok || len(values) == 0 {
-		return "", nil, ErrWrongArgs
+		return nil, ErrWrongArgs
 	}
 
 	commandName, ok := values[0].BulkString()
 	if !ok {
-		return "", nil, ErrWrongArgs
+		return nil, ErrWrongArgs
 	}
 
 	argVals, err := parseBulkStrCommand(values[1:])
 
 	if err != nil {
-		return "", nil, ErrWrongArgs
+		return nil, ErrWrongArgs
 	}
 
-	return strings.ToUpper(commandName), argVals, nil
+	return append([]string{strings.ToUpper(commandName)}, argVals...), nil
 }
 
 func parseBulkStrCommand(args []Value) ([]string, error) {

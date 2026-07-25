@@ -74,26 +74,25 @@ func (c *Client) HandleCommand(req Value) CommandResult {
 		handles AOF behaviors for command result (writing command to log if mutation occured)
 	*/
 
-	command, args, err := ParseCommand(req)
+	tokens, err := ParseCommand(req)
 	if err != nil {
 		return Failed(syntaxError())
 	}
 
-	spec, ok := c.server.sh.getCommand(command)
-	if !ok {
-
-		return Failed(unknownCommand(command))
+	rCmd, err := c.server.sh.Resolve(tokens)
+	if err != nil {
+		return Failed(Error(err.Error()))
 	}
 
-	if err = validateCommandArity(spec, command, args); err != nil {
-		return Failed(wrongArgs(command))
+	if err = validateCommandArity(rCmd.Spec, rCmd.Name, rCmd.Args); err != nil {
+		return Failed(wrongArgs(rCmd.Name))
 	}
 	// validate mode, make sure command can be done in current client mode
-	if err = validateCommandMode(c, spec); err != nil {
+	if err = validateCommandMode(c, rCmd.Spec); err != nil {
 		return Failed(invalidStateError())
 	}
 
-	if shouldQueuePipeline(c, command, spec) {
+	if shouldQueuePipeline(c, rCmd.Name, rCmd.Spec) {
 		// queue this only
 		c.txQueue = append(c.txQueue, req)
 		return Result(SimpleString("OK"))
@@ -101,10 +100,10 @@ func (c *Client) HandleCommand(req Value) CommandResult {
 
 	dirtyBefore := c.server.dirty
 
-	result := spec.Handler(c, args)
+	result := rCmd.Spec.Handler(c, rCmd.Args)
 	// aof write
 	// ? make this jsut so spec is a write one
-	if shouldAppendAof(spec, dirtyBefore, c.server.dirty) {
+	if shouldAppendAof(rCmd.Spec, dirtyBefore, c.server.dirty) {
 		c.aof.Append(req)
 	}
 	return result

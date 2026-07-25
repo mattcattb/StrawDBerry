@@ -1,5 +1,7 @@
 package redis
 
+import "strings"
+
 type CommandTable struct {
 	commands map[string]Command
 	stats    CommandStat
@@ -35,6 +37,52 @@ func (sh *CommandTable) getCommand(command string) (Command, bool) {
 	}
 
 	return spec, true
+}
+
+func (sh *CommandTable) Resolve(tokens []string) (ResolvedCommand, error) {
+
+	if len(tokens) == 0 {
+		return ResolvedCommand{}, ErrWrongArgs
+	}
+	name := strings.ToUpper(tokens[0])
+	spec, ok := sh.commands[name]
+	if !ok {
+		return ResolvedCommand{Name: name}, ErrUnknownCommand
+	}
+
+	path := []string{name}
+	next := 1
+
+	for len(spec.subcommands) > 0 {
+		if next == len(tokens) {
+			return ResolvedCommand{
+				Name: strings.Join(path, "|"),
+			}, ErrWrongArgs
+		}
+		subcommandName := strings.ToUpper(tokens[next])
+		path = append(path, subcommandName)
+		subcommand, ok := spec.subcommands[subcommandName]
+
+		if !ok {
+			return ResolvedCommand{
+				Name: strings.Join(path, "|"),
+			}, ErrUnknownCommand
+		}
+		spec = subcommand
+		next++
+	}
+
+	if spec.Handler == nil {
+		return ResolvedCommand{
+			Name: strings.Join(path, "|"),
+		}, ErrUnknownCommand
+	}
+
+	return ResolvedCommand{
+		Name: strings.Join(path, "|"),
+		Spec: spec,
+		Args: tokens[next:],
+	}, nil
 
 }
 

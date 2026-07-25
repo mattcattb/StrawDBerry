@@ -3,21 +3,21 @@ package redis
 import "testing"
 
 func TestParseCommandUppercasesCommandAndKeepsArgs(t *testing.T) {
-	gotCommand, gotArgs, err := ParseCommand(Array([]Value{
+	got, err := ParseCommand(Array([]Value{
 		BulkString("get"),
 		BulkString("name"),
 	}))
 	if err != nil {
 		t.Fatalf("ParseCommand() error = %v, want nil", err)
 	}
-	if gotCommand != "GET" {
-		t.Fatalf("command = %q, want %q", gotCommand, "GET")
+	if len(got) != 2 {
+		t.Fatalf("len(tokens) = %d, want 2", len(got))
 	}
-	if len(gotArgs) != 1 {
-		t.Fatalf("len(args) = %d, want 1", len(gotArgs))
+	if got[0] != "GET" {
+		t.Fatalf("command = %q, want %q", got[0], "GET")
 	}
 
-	gotKey := gotArgs[0]
+	gotKey := got[1]
 	if gotKey != "name" {
 		t.Fatalf("arg[0] = %q, want %q", gotKey, "name")
 	}
@@ -35,9 +35,9 @@ func TestParseCommandRejectsInvalidInput(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			command, args, err := ParseCommand(tt.in)
+			tokens, err := ParseCommand(tt.in)
 			if err == nil {
-				t.Fatalf("ParseCommand() = %q, %#v, nil; want error", command, args)
+				t.Fatalf("ParseCommand() = %#v, nil; want error", tokens)
 			}
 		})
 	}

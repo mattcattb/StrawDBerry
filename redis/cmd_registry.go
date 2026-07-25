@@ -128,11 +128,13 @@ var ManagementCMDTable map[string]Command = map[string]Command{
 		Group:   ManagementGroup,
 	},
 
-	"COMMANDCOUNT": {
-		Handler: CommandCount,
-	},
-	"COMMANDLIST": {
-		Handler: CommandCount,
+	"COMMAND": {
+		Handler: CommandList,
+		Arity:   0,
+		subcommands: map[string]Command{
+			"LIST":  {Arity: 0, Handler: CommandList, Flags: CmdRead},
+			"COUNT": {Arity: 0, Handler: CommandCount, Flags: CmdRead},
+		},
 	},
 }
 
@@ -193,24 +195,23 @@ var GenericCMDTable map[string]Command = map[string]Command{
 		Handler: Restore,
 		Arity:   1,
 	},
-	"OBJECTENCODING": {
-		Arity:   1,
-		Handler: ObjectEncodingCmd,
-		Group:   GenericGroup,
-		Flags:   CmdRead,
+
+	"OBJECT": {
+		subcommands: map[string]Command{
+			"ENCODING": {
+				Arity:   1,
+				Handler: ObjectEncodingCmd,
+				Group:   GenericGroup,
+				Flags:   CmdRead,
+			},
+		},
 	},
+
 	"FLUSHALL": {
 		Arity:   0,
 		Handler: FlushAll,
 		Group:   GenericGroup,
 		Flags:   CmdRead,
-	},
-	"COMMANDLIST": {
-		Handler: CommandList,
-		Arity:   0,
-	},
-	"COMMANDCOUNT": {
-		Handler: CommandCount,
 	},
 }
 
