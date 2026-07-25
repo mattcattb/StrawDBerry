@@ -1,5 +1,114 @@
 package redis
 
+import (
+	"strconv"
+	"strings"
+)
+
+func Keys(c *Client, args []string) CommandResult {
+	keys := make([]Value, 0)
+	for _, key := range c.db.keysSnapshot() {
+		if globMatch(args[0], key) {
+			keys = append(keys, BulkString(key))
+		}
+	}
+
+	return Result(Array(keys))
+}
+
+func Scan(c *Client, args []string) CommandResult {
+	cursor, err := strconv.ParseUint(args[0], 10, 64)
+	if err != nil {
+		return Failed(invalidInteger())
+	}
+
+	pattern := "*"
+	count := 10
+	for i := 1; i < len(args); {
+		switch strings.ToUpper(args[i]) {
+		case "MATCH":
+			if i+1 >= len(args) {
+				return Failed(syntaxError())
+			}
+			pattern = args[i+1]
+			i += 2
+		case "COUNT":
+			if i+1 >= len(args) {
+				return Failed(syntaxError())
+			}
+
+			parsedCount, err := strconv.Atoi(args[i+1])
+			if err != nil || parsedCount <= 0 {
+				return Failed(invalidInteger())
+			}
+			count = parsedCount
+			i += 2
+		default:
+			return Failed(syntaxError())
+		}
+	}
+
+	matched := make([]string, 0)
+	for _, key := range c.db.keysSnapshot() {
+		if globMatch(pattern, key) {
+			matched = append(matched, key)
+		}
+	}
+
+	if cursor >= uint64(len(matched)) {
+		return Result(Array([]Value{BulkString("0"), Array([]Value{})}))
+	}
+
+	end := cursor + uint64(count)
+	if end > uint64(len(matched)) {
+		end = uint64(len(matched))
+	}
+
+	keys := make([]Value, 0, end-cursor)
+	for _, key := range matched[cursor:end] {
+		keys = append(keys, BulkString(key))
+	}
+
+	nextCursor := "0"
+	if end < uint64(len(matched)) {
+		nextCursor = strconv.FormatUint(end, 10)
+	}
+
+	return Result(Array([]Value{BulkString(nextCursor), Array(keys)}))
+}
+
+func globMatch(pattern, key string) bool {
+	patternRunes := []rune(pattern)
+	keyRunes := []rune(key)
+
+	var match func(int, int) bool
+	match = func(patternIndex, keyIndex int) bool {
+		if patternIndex == len(patternRunes) {
+			return keyIndex == len(keyRunes)
+		}
+
+		switch patternRunes[patternIndex] {
+		case '*':
+			for nextKeyIndex := keyIndex; nextKeyIndex <= len(keyRunes); nextKeyIndex++ {
+				if match(patternIndex+1, nextKeyIndex) {
+					return true
+				}
+			}
+			return false
+		case '?':
+			return keyIndex < len(keyRunes) && match(patternIndex+1, keyIndex+1)
+		case '\\':
+			if patternIndex+1 < len(patternRunes) {
+				return keyIndex < len(keyRunes) && patternRunes[patternIndex+1] == keyRunes[keyIndex] && match(patternIndex+2, keyIndex+1)
+			}
+		}
+
+		return keyIndex < len(keyRunes) && patternRunes[patternIndex] == keyRunes[keyIndex] && match(patternIndex+1, keyIndex+1)
+	}
+
+	return match(0, 0)
+}
+
 // OBJECT ENCODING
 
 func Copy(c *Client, args []string) CommandResult {

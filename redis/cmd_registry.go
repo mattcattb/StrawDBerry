@@ -137,6 +137,18 @@ var ManagementCMDTable map[string]Command = map[string]Command{
 }
 
 var GenericCMDTable map[string]Command = map[string]Command{
+	"KEYS": {
+		Arity:   1,
+		Handler: Keys,
+		Flags:   CmdRead,
+		Group:   GenericGroup,
+	},
+	"SCAN": {
+		Arity:   -1,
+		Handler: Scan,
+		Flags:   CmdRead,
+		Group:   GenericGroup,
+	},
 	"COPY": {
 		Arity:   -2,
 		Handler: Copy,

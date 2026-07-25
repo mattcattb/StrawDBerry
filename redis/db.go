@@ -1,6 +1,7 @@
 package redis
 
 import (
+	"sort"
 	"sync"
 )
 
@@ -106,4 +107,24 @@ func (db *RedisDb) Flush() {
 	for k, _ := range db.dict {
 		db.deleteKeyLocked(k)
 	}
+}
+
+// keysSnapshot returns the current non-expired keys in a deterministic order so
+// cursor-based callers can use the next offset as their next cursor.
+func (db *RedisDb) keysSnapshot() []string {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	keys := make([]string, 0, len(db.dict))
+	for key, obj := range db.dict {
+		if obj.expired() {
+			db.stats.expiredKeys++
+			delete(db.dict, key)
+			continue
+		}
+		keys = append(keys, key)
+	}
+
+	sort.Strings(keys)
+	return keys
 }
