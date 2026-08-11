@@ -39,6 +39,31 @@ Run tests with:
 go test ./...
 ```
 
+## Configuration
+
+The server can be configured with environment variables named after the equivalent Redis directives:
+
+| Environment variable | Default | Values |
+| --- | --- | --- |
+| `REDIS_BIND` | `0.0.0.0` | IP address or hostname to listen on |
+| `REDIS_PORT` | `6479` | `1` through `65535` |
+| `REDIS_APPENDONLY` | `yes` | `yes` or `no` (also accepts boolean forms) |
+| `REDIS_APPENDFILENAME` | `appendonly.aof` | AOF file path |
+| `REDIS_APPENDFSYNC` | `always` | `always`, `everysec`, or `no` |
+
+For example:
+
+```sh
+REDIS_BIND=127.0.0.1 REDIS_PORT=6379 REDIS_APPENDFSYNC=everysec go run .
+```
+
+With Docker, publish the same container port selected by `REDIS_PORT` and mount `/data` to persist the AOF:
+
+```sh
+docker run --rm -p 6379:6379 -v redis-data:/data \
+  -e REDIS_PORT=6379 -e REDIS_APPENDFSYNC=everysec go-redis
+```
+
 ## Larger Features
 
 - key frequencies

@@ -29,16 +29,19 @@ type Server struct {
 	config  SConfig
 	clients map[*Client]struct{}
 	ps      *PubSubServer
-	aof     *Aof
+	aof     PersistanceLog
 	db      *RedisDb
 	sh      *CommandTable
 	dirty   uint64
 	sStats  *ServerStats
 }
 
-func NewServer(db *RedisDb, aof *Aof, sh *CommandTable) *Server {
+func NewServer(db *RedisDb, aof PersistanceLog, sh *CommandTable) *Server {
 
 	ps := NewPubsubServer()
+	if aof == nil {
+		aof = &DummyAofLog{}
+	}
 
 	return &Server{aof: aof, sh: sh, ps: ps, db: db,
 		clients: make(map[*Client]struct{}, 0),
