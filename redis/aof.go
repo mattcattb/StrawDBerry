@@ -129,9 +129,6 @@ func (a *Aof) ReplayAOF(executor *Client) error {
 		_ = executor.HandleCommand(v)
 		// uhhhh uhhh uhhh hmmmm
 	}
-
-	return nil
-
 }
 
 type DummyAofLog struct {
