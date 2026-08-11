@@ -291,3 +291,53 @@ var TxCmdTable map[string]Command = map[string]Command{
 
 // Zset commands are still in progress. Keep them out of the default command
 // table until the ranking/range implementation is complete.
+
+var ZsetCmdtable map[string]Command = map[string]Command{
+
+	"ZADD": {
+		Arity:   -3,
+		Flags:   CmdWrite,
+		Handler: Zadd,
+	},
+	"ZCOUNT": {
+		Arity:   3,
+		Flags:   CmdRead,
+		Handler: ZCount,
+	},
+	"ZRANK": {
+		Arity:   -2,
+		Handler: ZRank,
+	},
+	"ZRANGE": {
+		Arity:   -3,
+		Handler: ZRange,
+	},
+	"ZREM": {
+		Arity:   -2,
+		Handler: ZRem,
+	},
+	"ZREMRANGEBYRANK": {
+		Arity:   3,
+		Handler: ZRemRangeByRank,
+	},
+	"ZREMRANGEBYSCORE": {
+		Handler: ZRemRangeByScore,
+		Arity:   3,
+	},
+	"ZSCORE": {
+		Handler: ZScore,
+		Arity:   2,
+	},
+	"ZPOPMAX": {
+		Handler: ZPopMax,
+		Arity:   -1,
+	},
+	"ZPOPMIN": {
+		Handler: ZPopMin,
+		Arity:   -1,
+	},
+	"ZMPOP": {
+		Handler: ZMPop,
+		Arity:   -3,
+	},
+}
