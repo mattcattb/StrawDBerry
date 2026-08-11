@@ -143,13 +143,13 @@ func TestBasicSkiplistRemoveLastScoreResetsEmptyState(t *testing.T) {
 func TestZsetOwnsTheMemberIndex(t *testing.T) {
 	set := createZset()
 
-	existed, err := set.add("sam", 8)
-	if err != nil || existed {
-		t.Fatalf("first add = (%t, %v), want (false, nil)", existed, err)
+	if err := set.insertNew("sam", 8); err != nil {
+		t.Fatalf("insertNew(sam, 8): %v", err)
 	}
-	existed, err = set.add("sam", 10)
-	if err != nil || !existed {
-		t.Fatalf("update add = (%t, %v), want (true, nil)", existed, err)
+	node := set.byMember["sam"]
+	changed, err := set.updateScore(node, 10)
+	if err != nil || !changed {
+		t.Fatalf("updateScore(sam, 10) = (%t, %v), want (true, nil)", changed, err)
 	}
 
 	if len(set.byMember) != 1 || set.ordered.len != 1 {

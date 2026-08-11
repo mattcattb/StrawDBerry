@@ -387,7 +387,7 @@ func (z *zskiplist) findPredecessors(score float64, member string) ([]*zslNode, 
 	temp := zslNode{member: member, score: score}
 
 	for level := z.height - 1; level >= 0; level-- {
-		for nxt := cur.levels[level].forward; nxt != nil && nxt.cmp(&temp) < 0; {
+		for nxt := cur.levels[level].forward; nxt != nil && nxt.cmp(&temp) < 0; nxt = cur.levels[level].forward {
 			curRank += 1 + cur.levels[level].span
 			cur = nxt
 		}
@@ -480,9 +480,9 @@ func (z *zskiplist) nodeAtRank(rank uint64) *zslNode {
 	curRank := 0
 
 	for level := z.height - 1; level >= 0; level-- {
-		for curLvl := cur.levels[level]; curLvl.forward != nil && curRank+1+curLvl.span <= int(rank); {
-			curRank += 1 + curLvl.span
-			cur = curLvl.forward
+		for cur.levels[level].forward != nil && curRank+1+cur.levels[level].span <= int(rank) {
+			curRank += 1 + cur.levels[level].span
+			cur = cur.levels[level].forward
 		}
 	}
 	return cur

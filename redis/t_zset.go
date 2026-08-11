@@ -883,16 +883,16 @@ func ZMPop(c *Client, args []string) CommandResult {
 
 	numKeys := int(nk)
 
-	if len(args[1:]) < numKeys {
+	if numKeys <= 0 || len(args) < numKeys+2 {
 		return Failed(wrongArgs("ZMPOP"))
 	}
 
 	//! deduplicate same keys maybe?
-	keys := args[1:numKeys]
+	keys := args[1 : numKeys+1]
 
-	modifier := strings.ToUpper(args[numKeys])
+	modifier := strings.ToUpper(args[numKeys+1])
 
-	if modifier != "MIN" || modifier != "MAX" {
+	if modifier != "MIN" && modifier != "MAX" {
 		return Failed(wrongArgs("ZMPOP"))
 	}
 
@@ -900,7 +900,7 @@ func ZMPop(c *Client, args []string) CommandResult {
 
 	var count uint64 = 1
 
-	restArgs := args[numKeys+1:]
+	restArgs := args[numKeys+2:]
 	if len(restArgs) >= 2 && strings.ToUpper(restArgs[0]) == "COUNT" {
 		// check the next count maybe
 		c, err := strconv.ParseUint(restArgs[1], 10, 64)
