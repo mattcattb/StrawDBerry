@@ -91,6 +91,12 @@ func (db *RedisDb) StatsSnapshot() DbStatsSnapshot {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
+	for key, obj := range db.dict {
+		if obj.expired() {
+			db.stats.expiredKeys++
+			delete(db.dict, key)
+		}
+	}
 	curStats := db.stats
 	keys := len(db.dict)
 
@@ -98,15 +104,19 @@ func (db *RedisDb) StatsSnapshot() DbStatsSnapshot {
 
 }
 
-func (db *RedisDb) Flush() {
+func (db *RedisDb) Flush() int {
 	// remove all keys
 
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
+	deleted := 0
 	for k, _ := range db.dict {
-		db.deleteKeyLocked(k)
+		if db.deleteKeyLocked(k) {
+			deleted++
+		}
 	}
+	return deleted
 }
 
 // keysSnapshot returns the current non-expired keys in a deterministic order so

@@ -57,14 +57,20 @@ var StringCmdTable map[string]Command = map[string]Command{
 	},
 }
 
-var HashCmdTable map[string]Command = map[string]Command{"HSET": {
-	Arity:   -3,
-	Flags:   CmdWrite,
-	Handler: HSet,
-},
+var HashCmdTable map[string]Command = map[string]Command{
+	"HSET": {
+		Arity:   -3,
+		Flags:   CmdWrite,
+		Handler: HSet,
+	},
+	"HGET": {
+		Arity:   2,
+		Flags:   CmdRead,
+		Handler: HGet,
+	},
 
 	"HDEL": {
-		Arity:   2,
+		Arity:   -2,
 		Flags:   CmdWrite,
 		Handler: HDel},
 	"HGETALL": {
@@ -108,8 +114,26 @@ var SetCmdTable map[string]Command = map[string]Command{"SADD": {
 		Flags:   CmdRead,
 		Arity:   2,
 	},
+	"SMEMBERS": {
+		Handler: SMembers,
+		Group:   SetGroup,
+		Flags:   CmdRead,
+		Arity:   1,
+	},
 	"SDIFF": {
 		Handler: SDiff,
+		Arity:   -1,
+		Group:   SetGroup,
+		Flags:   CmdRead,
+	},
+	"SINTER": {
+		Handler: SInter,
+		Arity:   -1,
+		Group:   SetGroup,
+		Flags:   CmdRead,
+	},
+	"SUNION": {
+		Handler: SUnion,
 		Arity:   -1,
 		Group:   SetGroup,
 		Flags:   CmdRead,
@@ -172,7 +196,7 @@ var GenericCMDTable map[string]Command = map[string]Command{
 	"TTL": {
 		Arity:   1,
 		Group:   GenericGroup,
-		Flags:   CmdWrite,
+		Flags:   CmdRead,
 		Handler: Ttl,
 	},
 	"PERSIST": {
@@ -211,7 +235,7 @@ var GenericCMDTable map[string]Command = map[string]Command{
 		Arity:   0,
 		Handler: FlushAll,
 		Group:   GenericGroup,
-		Flags:   CmdRead,
+		Flags:   CmdWrite,
 	},
 }
 
@@ -232,12 +256,12 @@ var PubsubCmdTable map[string]Command = map[string]Command{
 		Handler: Subscribe,
 		Arity:   1,
 		Group:   PubsubGroup,
-		Flags:   CmdAllowedInPubsub & CmdNoMulti,
+		Flags:   CmdAllowedInPubsub | CmdNoMulti,
 	}, "UNSUBSCRIBE": {
 		Handler: Unsubscribe,
 		Arity:   1,
 		Group:   PubsubGroup,
-		Flags:   CmdAllowedInPubsub & CmdNoMulti,
+		Flags:   CmdAllowedInPubsub | CmdNoMulti,
 	},
 	"PUBLISH": {
 		Handler: Publish,

@@ -11,11 +11,9 @@ func newStringCommandTestClient() *Client {
 
 	server.RegisterCMDTable()
 
-	return &Client{
-		server: server,
-		db:     db,
-		mode:   ModeNormal,
-	}
+	client := NewClient(nil, server)
+	client.aof = &DummyAofLog{}
+	return client
 }
 
 func TestStringCommandSetThenGet(t *testing.T) {

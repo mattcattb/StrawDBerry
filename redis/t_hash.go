@@ -97,6 +97,7 @@ func HSet(c *Client, args []string) CommandResult {
 	defer c.db.mu.Unlock()
 
 	setCount := 0
+	changed := false
 
 	obj, exists := c.db.lookupKeyLocked(key)
 
@@ -112,14 +113,22 @@ func HSet(c *Client, args []string) CommandResult {
 	for i := 0; i < len(kvArray); i += 2 {
 		field, value := kvArray[i], kvArray[i+1]
 
+		oldValue, fieldExists := hashObj[field]
+		if !fieldExists {
+			setCount += 1
+		}
+		if !fieldExists || oldValue != value {
+			changed = true
+		}
 		hashObj[field] = value
-		setCount += 1
 	}
 
 	obj.ptr = hashMapPayload(hashObj)
 
 	c.db.setKeyLocked(key, obj)
-	c.server.dirty += 1
+	if changed {
+		c.server.dirty += 1
+	}
 	return Result(Integer(setCount))
 
 }
@@ -154,6 +163,10 @@ func HDel(c *Client, args []string) CommandResult {
 
 	if delCount > 0 {
 		c.server.dirty += 1
+		if len(hash) == 0 {
+			delete(c.db.dict, key)
+			c.db.stats.deletedKeys++
+		}
 	}
 
 	return Result(Integer(delCount))

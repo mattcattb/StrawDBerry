@@ -1,6 +1,7 @@
 package redis
 
 import (
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -114,14 +115,16 @@ func parseOptionalArgs(args []string) (so setOptions, err error) {
 			so.xx = true
 
 		case "EX":
+			if so.ex != nil || so.px != nil || so.xAt != nil || so.pXAt != nil || so.keepTtl {
+				return so, ErrWrongArgs
+			}
 			if i+1 >= argLen {
-				// we dont have an extra one here
 				return so, ErrWrongArgs
 			}
 
 			secStr := args[i+1]
 			secVal, ok := tryParseInt64(secStr)
-			if !ok {
+			if !ok || secVal <= 0 {
 				return so, ErrInvalidEncoding
 			}
 
@@ -129,21 +132,56 @@ func parseOptionalArgs(args []string) (so setOptions, err error) {
 			i++
 
 		case "PX":
+			if so.ex != nil || so.px != nil || so.xAt != nil || so.pXAt != nil || so.keepTtl {
+				return so, ErrWrongArgs
+			}
 			if i+1 >= argLen {
-				// we dont have an extra one here
 				return so, ErrWrongArgs
 			}
 
 			msStr := args[i+1]
 			msVal, ok := tryParseInt64(msStr)
-			if !ok {
+			if !ok || msVal <= 0 {
 				return so, ErrInvalidEncoding
 			}
 
 			so.px = &msVal
 			i++
+		case "EXAT":
+			if so.ex != nil || so.px != nil || so.xAt != nil || so.pXAt != nil || so.keepTtl {
+				return so, ErrWrongArgs
+			}
+			if i+1 >= argLen {
+				return so, ErrWrongArgs
+			}
+			secVal, ok := tryParseInt64(args[i+1])
+			if !ok || secVal <= 0 {
+				return so, ErrInvalidEncoding
+			}
+			so.xAt = &secVal
+			i++
+		case "PXAT":
+			if so.ex != nil || so.px != nil || so.xAt != nil || so.pXAt != nil || so.keepTtl {
+				return so, ErrWrongArgs
+			}
+			if i+1 >= argLen {
+				return so, ErrWrongArgs
+			}
+			msVal, ok := tryParseInt64(args[i+1])
+			if !ok || msVal <= 0 {
+				return so, ErrInvalidEncoding
+			}
+			so.pXAt = &msVal
+			i++
 		case "KEEPTTL":
+			if so.ex != nil || so.px != nil || so.xAt != nil || so.pXAt != nil {
+				return so, ErrWrongArgs
+			}
 			so.keepTtl = true
+		case "GET":
+			so.get = true
+		default:
+			return so, ErrWrongArgs
 		}
 	}
 
@@ -156,51 +194,75 @@ func Set(c *Client, args []string) CommandResult {
 	c.db.mu.Lock()
 	defer c.db.mu.Unlock()
 
-	expiresAt := noExpiration
-
 	options, err := parseOptionalArgs(args)
 
 	if err != nil {
-		return Failed(wrongArgs("SET"))
+		if err == ErrInvalidEncoding {
+			return Failed(invalidInteger())
+		}
+		return Failed(syntaxError())
 	}
 
+	obj, exists := c.db.lookupKeyLocked(key)
+	oldReply := Null()
+	if options.get && exists {
+		oldValue, err := stringObjectValue(obj)
+		if err != nil {
+			return Failed(wrongTypeError())
+		}
+		oldReply = BulkString(oldValue)
+	}
+
+	shouldSet := true
+	if options.xx && !exists {
+		shouldSet = false
+	} else if options.nx && exists {
+		shouldSet = false
+	}
+
+	if !shouldSet {
+		if options.get {
+			return Result(oldReply)
+		}
+		return Result(Null())
+	}
+
+	expiresAt := noExpiration
+	now := time.Now().UnixMilli()
+	if options.keepTtl && exists {
+		expiresAt = obj.expiresAt
+	}
 	if options.ex != nil {
-		expiresAt = time.Now().UnixMilli() + (*options.ex * 1000)
+		if *options.ex > (math.MaxInt64-now)/1000 {
+			return Failed(invalidInteger())
+		}
+		expiresAt = now + (*options.ex * 1000)
 	}
 	if options.px != nil {
-		expiresAt = time.Now().UnixMilli() + *options.px
+		if *options.px > math.MaxInt64-now {
+			return Failed(invalidInteger())
+		}
+		expiresAt = now + *options.px
+	}
+	if options.xAt != nil {
+		if *options.xAt > math.MaxInt64/1000 {
+			return Failed(invalidInteger())
+		}
+		expiresAt = *options.xAt * 1000
+	}
+	if options.pXAt != nil {
+		expiresAt = *options.pXAt
 	}
 
 	newObj := newStringObject(val)
 	newObj.expiresAt = expiresAt
 
-	shouldSet := true
-
-	if options.xx {
-		// set if exists
-		if _, exists := c.db.lookupKeyLocked(key); !exists {
-			shouldSet = false
-		}
-
-	} else if options.nx {
-		// set if doesnt exist
-
-		if _, exists := c.db.lookupKeyLocked(key); exists {
-			shouldSet = false
-		}
+	c.db.setKeyLocked(key, newObj)
+	c.server.dirty += 1
+	if options.get {
+		return Result(oldReply)
 	}
-
-	if shouldSet {
-		c.db.setKeyLocked(key, newObj)
-		c.server.dirty += 1
-		return Result(SimpleString("OK"))
-	}
-	// TODO get
-
-	// GET: return old string stored at the key, or nil if the key did not exist. An error is returned and SET is aborted if the value stored at the key is not a string.
-
-	return Result(Null())
-
+	return Result(SimpleString("OK"))
 }
 
 func Get(c *Client, args []string) CommandResult {
@@ -357,7 +419,7 @@ func MSet(c *Client, args []string) CommandResult {
 	}
 
 	c.server.dirty += 1
-	return Result(SimpleString("ok"))
+	return Result(SimpleString("OK"))
 }
 
 // Returns the length of the string value stored at key. An error is returned when key holds a non-string value.

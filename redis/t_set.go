@@ -1,5 +1,7 @@
 package redis
 
+import "sort"
+
 func newSetObj() *RedisObject {
 	return &RedisObject{
 		typ:       SetObject,
@@ -139,7 +141,16 @@ func SRem(c *Client, args []string) CommandResult {
 		}
 	}
 
-	return Result(Integer(0))
+	if n > 0 {
+		c.server.dirty += uint64(n)
+		set, _ := setObjValue(rObj)
+		if len(set) == 0 {
+			delete(c.db.dict, key)
+			c.db.stats.deletedKeys++
+		}
+	}
+
+	return Result(Integer(n))
 }
 
 func SMIsMem(c *Client, args []string) CommandResult {
@@ -201,19 +212,107 @@ func SIsMem(c *Client, args []string) CommandResult {
 	return Result(Integer(n))
 }
 
+func setValuesForKeysLocked(c *Client, keys []string) ([]setMapPayload, error) {
+	sets := make([]setMapPayload, len(keys))
+	for i, key := range keys {
+		obj, exists := c.db.lookupKeyLocked(key)
+		if !exists {
+			continue
+		}
+		set, err := setObjValue(obj)
+		if err != nil {
+			return nil, err
+		}
+		sets[i] = set
+	}
+	return sets, nil
+}
+
+func setMembersReply(members map[string]struct{}) CommandResult {
+	ordered := make([]string, 0, len(members))
+	for member := range members {
+		ordered = append(ordered, member)
+	}
+	sort.Strings(ordered)
+
+	values := make([]Value, len(ordered))
+	for i, member := range ordered {
+		values[i] = BulkString(member)
+	}
+	return Result(Array(values))
+}
+
+func SMembers(c *Client, args []string) CommandResult {
+	c.db.mu.Lock()
+	defer c.db.mu.Unlock()
+
+	sets, err := setValuesForKeysLocked(c, args)
+	if err != nil {
+		return Failed(wrongTypeError())
+	}
+	return setMembersReply(sets[0])
+}
+
 func SDiff(c *Client, args []string) CommandResult {
+	c.db.mu.Lock()
+	defer c.db.mu.Unlock()
 
-	// diff set takes aSets and removes every item from the dKeys
-	aKey, dKeys := args[0], args[1:]
-
-	obj, exists := c.db.lookupKey(aKey)
-
-	if !exists {
-		// empty set beahviro here?
+	sets, err := setValuesForKeysLocked(c, args)
+	if err != nil {
+		return Failed(wrongTypeError())
 	}
 
-	_ = obj
-	_ = dKeys
+	remaining := make(map[string]struct{}, len(sets[0]))
+	for member := range sets[0] {
+		remaining[member] = struct{}{}
+	}
+	for _, set := range sets[1:] {
+		for member := range set {
+			delete(remaining, member)
+		}
+	}
+	return setMembersReply(remaining)
+}
 
-	return Failed(Error("not yet implemented"))
+func SInter(c *Client, args []string) CommandResult {
+	c.db.mu.Lock()
+	defer c.db.mu.Unlock()
+
+	sets, err := setValuesForKeysLocked(c, args)
+	if err != nil {
+		return Failed(wrongTypeError())
+	}
+
+	intersection := make(map[string]struct{})
+	for member := range sets[0] {
+		presentInAll := true
+		for _, set := range sets[1:] {
+			if _, exists := set[member]; !exists {
+				presentInAll = false
+				break
+			}
+		}
+		if presentInAll {
+			intersection[member] = struct{}{}
+		}
+	}
+	return setMembersReply(intersection)
+}
+
+func SUnion(c *Client, args []string) CommandResult {
+	c.db.mu.Lock()
+	defer c.db.mu.Unlock()
+
+	sets, err := setValuesForKeysLocked(c, args)
+	if err != nil {
+		return Failed(wrongTypeError())
+	}
+
+	union := make(map[string]struct{})
+	for _, set := range sets {
+		for member := range set {
+			union[member] = struct{}{}
+		}
+	}
+	return setMembersReply(union)
 }

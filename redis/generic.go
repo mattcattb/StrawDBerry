@@ -175,7 +175,10 @@ func Ttl(c *Client, args []string) CommandResult {
 
 	key := args[0]
 
-	obj, exists := c.db.lookupKey(key)
+	c.db.mu.Lock()
+	defer c.db.mu.Unlock()
+
+	obj, exists := c.db.lookupKeyLocked(key)
 
 	if !exists {
 		return Result(Integer(-2))
@@ -184,7 +187,7 @@ func Ttl(c *Client, args []string) CommandResult {
 	seconds := obj.ttlForObject()
 	if seconds == -2 {
 		delete(c.db.dict, key)
-		c.server.dirty += 1
+		c.db.stats.expiredKeys++
 		return Result(Integer(-2))
 	}
 
@@ -196,19 +199,17 @@ func Persist(c *Client, args []string) CommandResult {
 
 	key := args[0]
 
-	obj, e := c.db.lookupKey(key)
+	c.db.mu.Lock()
+	defer c.db.mu.Unlock()
 
-	rVal := 0
-
-	// return int 0 if doenst exist or no timeout
-	// 1 if persisted
-
-	if e && obj != nil {
-		obj.setExprMs(-1)
-		rVal = 1
+	obj, exists := c.db.lookupKeyLocked(key)
+	if !exists || obj.expiresAt == noExpiration {
+		return Result(Integer(0))
 	}
 
-	return Result(Integer(rVal))
+	obj.setExprMs(-1)
+	c.server.dirty += 1
+	return Result(Integer(1))
 }
 
 func Del(c *Client, args []string) CommandResult {
@@ -289,7 +290,10 @@ func ObjRefcount(c *Client, args []string) CommandResult {
 // ! async or sync here...!
 func FlushAll(c *Client, args []string) CommandResult {
 	// delete all keys
-	c.server.db.Flush()
+	deleted := c.server.db.Flush()
+	if deleted > 0 {
+		c.server.dirty += uint64(deleted)
+	}
 	return Result(SimpleString("OK"))
 
 }
