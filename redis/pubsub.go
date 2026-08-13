@@ -27,9 +27,16 @@ func NewPubsubServer() *PubSubServer {
 }
 
 func (ps *PubSubServer) disconnClient(client *Client) int {
+	ps.mu.Lock()
+	channels := make([]string, 0, len(ps.channels))
+	for channel := range ps.channels {
+		channels = append(channels, channel)
+	}
+	ps.mu.Unlock()
+
 	c := 0
-	for ch, _ := range ps.channels {
-		c += ps.unsub(ch, client)
+	for _, channel := range channels {
+		c += ps.unsub(channel, client)
 	}
 
 	return c
@@ -48,6 +55,7 @@ func (ps *PubSubServer) sub(client *Client, channel string) int {
 
 	if !exists {
 		chanMap = make(map[*Client]struct{})
+		ps.channels[channel] = chanMap
 	}
 
 	_, alreadySubscribed := chanMap[client]
@@ -69,6 +77,9 @@ func (ps *PubSubServer) sub(client *Client, channel string) int {
 }
 
 func (ps *PubSubServer) getSubed(channel string) (conClients []*Client) {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+
 	clients, chExists := ps.channels[channel]
 
 	if !chExists {
@@ -93,7 +104,7 @@ func (ps *PubSubServer) unsub(channel string, client *Client) int {
 	ch, exists := ps.channels[channel]
 
 	if !exists {
-		return 0
+		return ps.connCount[client]
 	}
 
 	_, isSubscribed := ch[client]
@@ -105,13 +116,15 @@ func (ps *PubSubServer) unsub(channel string, client *Client) int {
 	}
 
 	if connectedChannels != 0 {
-		// connected exists
+		delete(ch, client)
 		connectedChannels -= 1
-		ps.connCount[client] -= 1
+		ps.connCount[client] = connectedChannels
 		if connectedChannels == 0 {
-			// clear it, now its 0
 			delete(ps.connCount, client)
 		}
+	}
+	if len(ch) == 0 {
+		delete(ps.channels, channel)
 	}
 
 	return connectedChannels
@@ -144,7 +157,7 @@ func Publish(c *Client, args []string) CommandResult {
 
 	for _, targetClient := range clients {
 		sendMessage := Array([]Value{BulkString("message"), BulkString(channel), BulkString(message)})
-		targetClient.Send(sendMessage)
+		c.server.enqueueLocked(targetClient, sendMessage)
 	}
 
 	return Result(Integer(len(clients)))

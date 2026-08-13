@@ -2,6 +2,7 @@ package redis
 
 import (
 	"net"
+	"sync"
 )
 
 type ClientMode uint8
@@ -17,47 +18,95 @@ type PersistanceLog interface {
 	Append(v Value) error
 }
 
+type QueuedCommand struct {
+	request  Value
+	resolved ResolvedCommand
+}
+
 type Client struct {
-	out     chan Value
-	server  *Server
-	conn    net.Conn
-	reader  *Resp
-	writer  *Writer
-	txQueue []Value
-	db      *RedisDb
-	aof     PersistanceLog
-	mode    ClientMode
+	server    *Server
+	conn      net.Conn
+	outbox    chan Value
+	done      chan struct{}
+	closeOnce sync.Once
+	txFailed  bool
+	reader    *Resp
+	writer    *Writer
+	txQueue   []QueuedCommand
+	db        *RedisDb
+	aof       PersistanceLog
+	mode      ClientMode
 }
 
 func NewClient(conn net.Conn, server *Server) *Client {
-	return &Client{server: server, conn: conn, reader: NewResp(conn), writer: NewWriter(conn), db: server.db, aof: server.aof, mode: ModeNormal}
+	return &Client{
+		server: server,
+		conn:   conn,
+		reader: NewResp(conn),
+		writer: NewWriter(conn),
+		db:     server.db,
+		aof:    server.aof,
+		mode:   ModeNormal,
+		outbox: make(chan Value, 256),
+		done:   make(chan struct{}),
+	}
 }
 
-func (c *Client) ListenToPublishing(bufSize int) {
-
-	c.out = make(chan Value, bufSize)
-
+func (c *Client) startWriter() {
 	go func() {
-		// add check if blocking, do not do anything
-		for outVal := range c.out {
-			c.writer.Write(outVal)
+		for {
+			select {
+			case val := <-c.outbox:
+				if err := c.writer.Write(val); err != nil {
+					c.server.RequestDisconnect(c)
+					return
+				}
+			case <-c.done:
+				for {
+					select {
+					case val := <-c.outbox:
+						if err := c.writer.Write(val); err != nil {
+							c.server.RequestDisconnect(c)
+							return
+						}
+					default:
+						if c.conn != nil {
+							_ = c.conn.Close()
+						}
+						return
+					}
+				}
+			}
 		}
 	}()
-
 }
 
-func (c *Client) close() {
+func (c *Client) enqueue(val Value) bool {
+	select {
+	case <-c.done:
+		return false
+	default:
+	}
 
-	// close pubsub and disconnect client
-	close(c.out)
-	c.conn.Close()
-
+	select {
+	case c.outbox <- val:
+		return true
+	default:
+		return false
+	}
 }
 
-func (c *Client) Send(val Value) bool {
-	c.out <- val
+func (c *Client) finish() {
+	c.closeOnce.Do(func() {
+		close(c.done)
+	})
+}
 
-	return true
+func (c *Client) stop() {
+	c.finish()
+	if c.conn != nil {
+		_ = c.conn.Close()
+	}
 }
 
 /*
@@ -67,44 +116,5 @@ BLOCKING COMMAND FLAG: switch to blocking mode
 */
 
 func (c *Client) HandleCommand(req Value) CommandResult {
-
-	/*
-		Handle Command takes a req val, parses the command and arguments, looks up command spec,
-		validates arg size, validates flags for mode, executes command,
-		handles AOF behaviors for command result (writing command to log if mutation occured)
-	*/
-
-	tokens, err := ParseCommand(req)
-	if err != nil {
-		return Failed(syntaxError())
-	}
-
-	rCmd, err := c.server.sh.Resolve(tokens)
-	if err != nil {
-		return Failed(Error(err.Error()))
-	}
-
-	if err = validateCommandArity(rCmd.Spec, rCmd.Name, rCmd.Args); err != nil {
-		return Failed(wrongArgs(rCmd.Name))
-	}
-	// validate mode, make sure command can be done in current client mode
-	if err = validateCommandMode(c, rCmd.Spec); err != nil {
-		return Failed(invalidStateError())
-	}
-
-	if shouldQueuePipeline(c, rCmd.Name, rCmd.Spec) {
-		// queue this only
-		c.txQueue = append(c.txQueue, req)
-		return Result(SimpleString("OK"))
-	}
-
-	dirtyBefore := c.server.dirty
-
-	result := rCmd.Spec.Handler(c, rCmd.Args)
-	// aof write
-	// ? make this jsut so spec is a write one
-	if shouldAppendAof(rCmd.Spec, dirtyBefore, c.server.dirty) {
-		c.aof.Append(req)
-	}
-	return result
+	return c.server.execute(c, req, false)
 }

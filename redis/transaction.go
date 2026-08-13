@@ -5,15 +5,20 @@ func Exec(c *Client, args []string) CommandResult {
 	if c.mode != ModeTx {
 		return Failed(invalidStateError())
 	}
+	queued := c.txQueue
+	c.txQueue = nil
 	c.mode = ModeNormal
-	replies := make([]Value, len(c.txQueue))
+	if c.txFailed {
+		c.txFailed = false
+		return Failed(Error("EXECABORT Transaction discarded because of previous errors."))
+	}
 
-	for i, v := range c.txQueue {
-		result := c.HandleCommand(v)
+	replies := make([]Value, len(queued))
+	for i, command := range queued {
+		result := c.server.executeResolvedLocked(c, command.request, command.resolved)
 		replies[i] = result.Reply
 	}
 
-	c.txQueue = []Value{}
 	return Result(Array(replies))
 }
 
@@ -25,7 +30,8 @@ func Multi(c *Client, args []string) CommandResult {
 	}
 	// make mode multi mode?
 	c.mode = ModeTx
-	c.txQueue = make([]Value, 0)
+	c.txQueue = make([]QueuedCommand, 0)
+	c.txFailed = false
 
 	return Result(SimpleString("OK"))
 }
@@ -38,7 +44,8 @@ func Discard(c *Client, args []string) CommandResult {
 		return Failed(invalidStateError())
 	}
 	c.mode = ModeNormal
-	c.txQueue = make([]Value, 0)
+	c.txQueue = nil
+	c.txFailed = false
 
 	return Result(SimpleString("OK"))
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"sync"
 	"time"
 )
 
@@ -26,14 +27,16 @@ type ServerStats struct {
 }
 
 type Server struct {
-	config  SConfig
-	clients map[*Client]struct{}
-	ps      *PubSubServer
-	aof     *Aof
-	db      *RedisDb
-	sh      *CommandTable
-	dirty   uint64
-	sStats  *ServerStats
+	execMu    sync.Mutex // exec behaviors
+	clientsMu sync.Mutex // connection counter + client map
+	config    SConfig
+	clients   map[*Client]struct{}
+	ps        *PubSubServer
+	aof       *Aof
+	db        *RedisDb
+	sh        *CommandTable
+	dirty     uint64
+	sStats    *ServerStats
 }
 
 func NewServer(db *RedisDb, aof *Aof, sh *CommandTable) *Server {
@@ -70,10 +73,10 @@ A readable file event is created so that Redis is able to collect the client que
 func (s *Server) HandleConnection(conn net.Conn) {
 
 	client := NewClient(conn, s)
-	client.ListenToPublishing(0)
+	client.startWriter()
 	s.AddClient(client)
 
-	defer s.DisconnectClient(client)
+	defer s.FinishClient(client)
 
 	for {
 		req, err := client.reader.Read()
@@ -85,31 +88,117 @@ func (s *Server) HandleConnection(conn net.Conn) {
 
 		log.Printf("read request %q", string(req.Marshal()))
 
-		result := client.HandleCommand(req)
-
-		if err := client.writer.Write(result.Reply); err != nil {
-			log.Printf("write error to %s: %#v", conn.RemoteAddr(), err)
-			s.sStats.writeErrors++
-			continue
-		}
-
-		log.Printf("wrote reply to %s", conn.RemoteAddr())
+		s.execute(client, req, true)
 	}
 }
 
 func (s *Server) AddClient(c *Client) {
+	s.clientsMu.Lock()
+	defer s.clientsMu.Unlock()
+
 	s.clients[c] = struct{}{}
 	s.sStats.connectedClients++
 
 }
 
 func (s *Server) DisconnectClient(c *Client) {
-	c.close()
+	s.execMu.Lock()
+	defer s.execMu.Unlock()
+	s.disconnectClientLocked(c, true)
+}
+
+func (s *Server) RequestDisconnect(c *Client) {
+	s.DisconnectClient(c)
+}
+
+func (s *Server) FinishClient(c *Client) {
+	s.execMu.Lock()
+	defer s.execMu.Unlock()
+	s.disconnectClientLocked(c, false)
+}
+
+func (s *Server) disconnectClientLocked(c *Client, force bool) {
 	s.ps.disconnClient(c)
+	if force {
+		c.stop()
+	} else {
+		c.finish()
+	}
+
+	s.clientsMu.Lock()
+	defer s.clientsMu.Unlock()
+	if _, exists := s.clients[c]; !exists {
+		return
+	}
 	delete(s.clients, c)
 	s.sStats.connectedClients--
+}
 
-	// s.clients
+func (s *Server) enqueueLocked(c *Client, value Value) {
+	if !c.enqueue(value) {
+		s.disconnectClientLocked(c, true)
+	}
+}
+
+func (s *Server) prepare(request Value) (ResolvedCommand, CommandResult) {
+	tokens, err := ParseCommand(request)
+	if err != nil {
+		return ResolvedCommand{}, Failed(syntaxError())
+	}
+
+	command, err := s.sh.Resolve(tokens)
+	if err != nil {
+		return ResolvedCommand{}, Failed(Error(err.Error()))
+	}
+
+	if err := validateCommandArity(command.Spec, command.Name, command.Args); err != nil {
+		return ResolvedCommand{}, Failed(wrongArgs(command.Name))
+	}
+
+	return command, CommandResult{}
+}
+
+func (s *Server) execute(c *Client, request Value, deliver bool) CommandResult {
+	command, preparation := s.prepare(request)
+
+	s.execMu.Lock()
+	defer s.execMu.Unlock()
+
+	result := preparation
+	if !result.Failed {
+		result = s.executeResolvedLocked(c, request, command)
+	} else if c.mode == ModeTx {
+		c.txFailed = true
+	}
+
+	if deliver {
+		s.enqueueLocked(c, result.Reply)
+	}
+
+	return result
+}
+
+func (s *Server) executeResolvedLocked(c *Client, request Value, command ResolvedCommand) CommandResult {
+	if err := validateCommandMode(c, command.Spec); err != nil {
+		if c.mode == ModeTx && command.Spec.Group != TxGroup {
+			c.txFailed = true
+		}
+		return Failed(invalidStateError())
+	}
+
+	if shouldQueuePipeline(c, command.Name, command.Spec) {
+		c.txQueue = append(c.txQueue, QueuedCommand{request: request, resolved: command})
+		return Result(SimpleString("QUEUED"))
+	}
+
+	dirtyBefore := s.dirty
+	result := command.Spec.Handler(c, command.Args)
+	if shouldAppendAof(command.Spec, dirtyBefore, s.dirty) && c.aof != nil {
+		if err := c.aof.Append(request); err != nil {
+			log.Printf("AOF append failed: %v", err)
+		}
+	}
+	return result
 }
 
 func (s *Server) SocketListenLoop(l net.Listener) {
