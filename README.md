@@ -1,5 +1,9 @@
 # StrawDBerry
 
+<p align="center">
+  <img src="assets/strawdberry-icon.png" alt="StrawDBerry logo" width="220" />
+</p>
+
 My implementation of redis in golang from scratch.
 
 This is a learning project focused on the lower-level pieces: RESP parsing and writing, command execution, an in-memory keyspace, and basic persistence ideas. The code is still in progress and is not intended to be a production Redis replacement.
