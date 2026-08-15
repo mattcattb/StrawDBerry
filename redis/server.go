@@ -193,12 +193,35 @@ func (s *Server) executeResolvedLocked(c *Client, request Value, command Resolve
 
 	dirtyBefore := s.dirty
 	result := command.Spec.Handler(c, command.Args)
-	if shouldAppendAof(command.Spec, dirtyBefore, s.dirty) && c.aof != nil {
-		if err := c.aof.Append(request); err != nil {
+	if shouldAppendAof(command.Spec, dirtyBefore, s.dirty) && s.aof != nil {
+		if err := s.aof.Append(request); err != nil {
 			log.Printf("AOF append failed: %v", err)
 		}
 	}
 	return result
+}
+func (s *Server) LoadAOF() error {
+	if s.aof == nil {
+		return nil
+	}
+
+	// set loading as true here
+
+	defer func() {
+		// s.loading = false
+	}()
+
+	client := NewClient(nil, s)
+
+	return s.aof.Replay(client, func(req Value) error {
+		r := s.execute(client, req, false)
+
+		if r.Failed {
+			return fmt.Errorf("AOF command failed")
+		}
+
+		return nil
+	})
 }
 
 func (s *Server) SocketListenLoop(l net.Listener) {

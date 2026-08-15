@@ -47,8 +47,9 @@ type ResolvedCommand struct {
 }
 
 type CommandResult struct {
-	Reply  Value
-	Failed bool
+	Reply       Value
+	Failed      bool
+	propogation []Value
 }
 
 func Result(reply Value) CommandResult {

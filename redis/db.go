@@ -29,13 +29,13 @@ func NewDb() *RedisDb {
 
 // !
 
-func (db *RedisDb) lookupKey(key string) (*RedisObject, bool) {
+func (db *RedisDb) lookupKey(key string) (*RedisObject, bool, bool) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	return db.lookupKeyLocked(key)
 }
 
-func (db *RedisDb) lookupKeyLocked(key string) (*RedisObject, bool) {
+func (db *RedisDb) lookupKeyLocked(key string) (*RedisObject, bool, bool) {
 	obj := db.dict[key]
 	if obj == nil {
 		// key miss

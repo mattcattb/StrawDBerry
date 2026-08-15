@@ -38,7 +38,7 @@ type AofConfig struct {
 	FLUSH     flush bufio.Writer into the OS file
 	SYNC     ask OS to flush file contents to disk
 	CLOSE     flush/sync if needed, then close file
-	REPLAY read AOF commands and execute them into a DB
+	REPLAY read AOF commands and execute them into a DBw
 */
 // consider persistnace interface
 
@@ -109,12 +109,13 @@ func (a *Aof) Append(v Value) error {
 	return nil
 }
 
-func (a *Aof) ReplayAOF(executor *Client) error {
+// rather then giving this a dummy client, we can give in a seperate replay function here
+func (a *Aof) Replay(executor *Client, exectution func(req Value) error) error {
 	// replay AOF
 
 	// we need to modify the client executor here
 
-	executor.aof = &DummyAofLog{}
+	// executor.aof = &DummyAofLog{}
 
 	bufReader := bufio.NewReader(a.file)
 
@@ -126,16 +127,13 @@ func (a *Aof) ReplayAOF(executor *Client) error {
 			return err
 		}
 
-		_ = executor.HandleCommand(v)
-		// uhhhh uhhh uhhh hmmmm
+		err = exectution(v)
+
+		if err != nil {
+			return err
+		}
+
 	}
-}
-
-type DummyAofLog struct {
-}
-
-func (a *DummyAofLog) Append(v Value) error {
-	return nil
 }
 
 func (a *Aof) CompactLog(v Value) error {

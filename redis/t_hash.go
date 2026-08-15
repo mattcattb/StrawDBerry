@@ -43,7 +43,7 @@ func hashTypeSet(obj *RedisObject, key, value string) (bool, error) {
 }
 
 func hashTypeGet(obj *RedisObject, field string) (string, bool, error) {
-	hash, err := hashObjValue(obj)
+	hash, err := hashObjValue(obj) // set this a bit more here !!!!
 	if err != nil {
 		return "", false, err
 	}

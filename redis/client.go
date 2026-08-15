@@ -14,10 +14,6 @@ const (
 	ModePubsub
 )
 
-type PersistanceLog interface {
-	Append(v Value) error
-}
-
 type QueuedCommand struct {
 	request  Value
 	resolved ResolvedCommand
@@ -34,8 +30,8 @@ type Client struct {
 	writer    *Writer
 	txQueue   []QueuedCommand
 	db        *RedisDb
-	aof       PersistanceLog
-	mode      ClientMode
+	// aof       PersistanceLog
+	mode ClientMode
 }
 
 func NewClient(conn net.Conn, server *Server) *Client {
@@ -45,7 +41,7 @@ func NewClient(conn net.Conn, server *Server) *Client {
 		reader: NewResp(conn),
 		writer: NewWriter(conn),
 		db:     server.db,
-		aof:    server.aof,
+		// aof:    server.aof,
 		mode:   ModeNormal,
 		outbox: make(chan Value, 256),
 		done:   make(chan struct{}),
