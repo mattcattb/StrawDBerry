@@ -1,4 +1,4 @@
-module go-redis
+module github.com/mattcattb/StrawDBerry
 
 go 1.25.6
 

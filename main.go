@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"go-redis/redis"
+	"github.com/mattcattb/StrawDBerry/redis"
 	"net"
 	"time"
 )

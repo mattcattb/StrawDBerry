@@ -1,4 +1,4 @@
-# go-redis
+# StrawDBerry
 
 My implementation of redis in golang from scratch.
 
