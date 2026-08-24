@@ -14,9 +14,7 @@ func newExecutionTestServer() *Server {
 }
 
 func newExecutionTestClient(server *Server) *Client {
-	client := NewClient(nil, server)
-	client.aof = &DummyAofLog{}
-	return client
+	return NewClient(nil, server)
 }
 
 func TestClientOutboxWritesRepliesInOrder(t *testing.T) {

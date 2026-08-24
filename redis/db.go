@@ -40,7 +40,7 @@ func (db *RedisDb) lookupKeyLocked(key string) (*RedisObject, bool, bool) {
 	if obj == nil {
 		// key miss
 		db.stats.ksMisses++
-		return nil, false
+		return nil, false, false
 	}
 
 	if obj.expired() {
@@ -48,11 +48,11 @@ func (db *RedisDb) lookupKeyLocked(key string) (*RedisObject, bool, bool) {
 		db.stats.expiredKeys++
 		db.stats.ksMisses++
 		delete(db.dict, key)
-		return nil, false
+		return nil, false, true
 	}
 
 	db.stats.ksHits++
-	return obj, true
+	return obj, true, false
 }
 
 // do a memory check here?

@@ -3,25 +3,25 @@ package redis
 type ObjectEncoding uint8
 
 const (
-	EncodingRaw ObjectEncoding = iota
-	EncodingInt
-	EncodingHashMap
-	EncodingSetMap
-	EncodingSkipList
+	ObjectEncodingStringRaw ObjectEncoding = iota
+	ObjectEncodingStringInt
+	ObjectEncodingHashMap
+	ObjectEncodingSetMap
+	ObjectEncodingZSetSkiplist
 )
 
-func (e ObjectEncoding) StrRep() string {
+func (e ObjectEncoding) String() string {
 	switch e {
-	case EncodingInt:
+	case ObjectEncodingStringInt:
 		return "int"
-	case EncodingRaw:
+	case ObjectEncodingStringRaw:
 		return "raw"
-	case EncodingHashMap:
+	case ObjectEncodingHashMap:
 		return "hashtable"
-	case EncodingSetMap:
+	case ObjectEncodingSetMap:
 		return "hashtable"
 
-	case EncodingSkipList:
+	case ObjectEncodingZSetSkiplist:
 		return "skiplist"
 	default:
 		return "UNKNOWN"

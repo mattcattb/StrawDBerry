@@ -24,7 +24,8 @@ var ErrTimeout = errors.New("TimeoutError")
 var ErrAuthentication = errors.New("AuthenticationError")
 
 // Command Errors
-var ErrInvalidEncoding = errors.New(("wrong encoding"))
+var ErrInvalidEncoding = errors.New("wrong encoding")
+var ErrInvalidObjectType = errors.New("invalid object type")
 var ErrWrongArgs = errors.New("wrong number of arguments")
 var ErrUnknownCommand = errors.New("ERR unknown command")
 var ErrWrongType = errors.New("WRONGTYPE") // wrong object type
@@ -69,19 +70,14 @@ func internalError() Value {
 }
 
 func mapRedisErrorToResp(err error) Value {
-
-	switch err {
-	case ErrWrongArgs:
-		return wrongTypeError()
-	}
-
 	switch {
 	case errors.Is(err, ErrWrongType):
-		return wrongTypeError()
-
-	case errors.Is(err, ErrInvalidEncoding):
 		return wrongTypeError()
 	}
 
 	return internalError()
+}
+
+func commandFailure(err error) CommandResult {
+	return Failed(mapRedisErrorToResp(err))
 }

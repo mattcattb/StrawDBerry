@@ -24,18 +24,18 @@ func createZset() *zset {
 	}
 }
 
-// zsetSkiplistValue validates and extracts the skiplist-specific payload.
-func zsetSkiplistValue(o *RedisObject) (*zset, error) {
-	if o.typ != ZSetObject {
-		return nil, ErrWrongType
+// zsetSkiplistFromObject validates and extracts the skiplist-specific payload.
+func zsetSkiplistFromObject(o *RedisObject) (*zset, error) {
+	if err := o.checkType(ObjectTypeZSet); err != nil {
+		return nil, err
 	}
-	if o.encoding != EncodingSkipList {
-		return nil, ErrWrongType
+	if o.encoding != ObjectEncodingZSetSkiplist {
+		return nil, ErrInvalidEncoding
 	}
 
-	zs, ok := o.ptr.(*zset)
+	zs, ok := o.payload.(*zset)
 	if !ok {
-		return nil, ErrWrongType
+		return nil, ErrInvalidEncoding
 	}
 	return zs, nil
 }

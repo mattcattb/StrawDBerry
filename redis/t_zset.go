@@ -11,11 +11,14 @@ type zsetEntry struct {
 	Score  float64
 }
 
-func zsetTypeLen(obj *RedisObject) (uint64, error) {
+func zsetCardinality(obj *RedisObject) (uint64, error) {
+	if err := obj.checkType(ObjectTypeZSet); err != nil {
+		return 0, err
+	}
 
 	switch obj.encoding {
-	case EncodingSkipList:
-		zset, err := zsetSkiplistValue(obj)
+	case ObjectEncodingZSetSkiplist:
+		zset, err := zsetSkiplistFromObject(obj)
 
 		if err != nil {
 			return 0, err
@@ -30,10 +33,40 @@ func zsetTypeLen(obj *RedisObject) (uint64, error) {
 	}
 }
 
-func zsetTypeScore(obj *RedisObject, member string) (score float64, found bool, err error) {
+func cloneZSetPayload(obj *RedisObject) (objectPayload, error) {
+	if err := obj.checkType(ObjectTypeZSet); err != nil {
+		return nil, err
+	}
+
 	switch obj.encoding {
-	case EncodingSkipList:
-		zs, err := zsetSkiplistValue(obj)
+	case ObjectEncodingZSetSkiplist:
+		zset, err := zsetSkiplistFromObject(obj)
+
+		if err != nil {
+			return nil, err
+		}
+
+		newZset := createZset()
+
+		for member, node := range zset.byMember {
+			if err := newZset.insertNew(member, node.score); err != nil {
+				return nil, err
+			}
+		}
+		return newZset, nil
+	default:
+		return nil, ErrInvalidEncoding
+	}
+}
+
+func zsetScore(obj *RedisObject, member string) (score float64, found bool, err error) {
+	if err := obj.checkType(ObjectTypeZSet); err != nil {
+		return score, false, err
+	}
+
+	switch obj.encoding {
+	case ObjectEncodingZSetSkiplist:
+		zs, err := zsetSkiplistFromObject(obj)
 
 		if err != nil {
 			return score, found, err
@@ -57,7 +90,7 @@ type zsetAddOptions struct {
 	CH   bool
 }
 
-func parseZaddOptions(args []string) (za zsetAddOptions, pairStart int) {
+func parseZAddOptions(args []string) (za zsetAddOptions, pairStart int) {
 
 	for pairStart < len(args) {
 		switch strings.ToUpper(args[pairStart]) {
@@ -94,12 +127,16 @@ type zsetAddResult struct {
 	Score   float64
 }
 
-func zsetTypeAdd(obj *RedisObject, entry zsetEntry, options zsetAddOptions) (result zsetAddResult, err error) {
+func zsetAdd(obj *RedisObject, entry zsetEntry, options zsetAddOptions) (result zsetAddResult, err error) {
+	if err := obj.checkType(ObjectTypeZSet); err != nil {
+		return result, err
+	}
+
 	switch obj.encoding {
 
-	case EncodingSkipList:
+	case ObjectEncodingZSetSkiplist:
 
-		zs, err := zsetSkiplistValue(obj)
+		zs, err := zsetSkiplistFromObject(obj)
 
 		if err != nil {
 			return result, err
@@ -154,10 +191,14 @@ func zsetTypeAdd(obj *RedisObject, entry zsetEntry, options zsetAddOptions) (res
 	}
 }
 
-func zsetTypeRemove(obj *RedisObject, member string) (removed bool, err error) {
+func zsetRemove(obj *RedisObject, member string) (removed bool, err error) {
+	if err := obj.checkType(ObjectTypeZSet); err != nil {
+		return false, err
+	}
+
 	switch obj.encoding {
-	case EncodingSkipList:
-		zs, err := zsetSkiplistValue(obj)
+	case ObjectEncodingZSetSkiplist:
+		zs, err := zsetSkiplistFromObject(obj)
 		if err != nil {
 			return removed, err
 		}
@@ -169,10 +210,14 @@ func zsetTypeRemove(obj *RedisObject, member string) (removed bool, err error) {
 	}
 }
 
-func zsetTypeRank(obj *RedisObject, member string) (rank uint64, found bool, err error) {
+func zsetRank(obj *RedisObject, member string) (rank uint64, found bool, err error) {
+	if err := obj.checkType(ObjectTypeZSet); err != nil {
+		return 0, false, err
+	}
+
 	switch obj.encoding {
-	case EncodingSkipList:
-		zs, err := zsetSkiplistValue(obj)
+	case ObjectEncodingZSetSkiplist:
+		zs, err := zsetSkiplistFromObject(obj)
 		if err != nil {
 			return rank, found, err
 		}
@@ -220,11 +265,14 @@ type scoreRange struct {
 	max scoreBound
 }
 
-func zsetTypeRangeByRank(obj *RedisObject, rankRange rankRange, rev bool) ([]zsetEntry, error) {
+func zsetRangeByRank(obj *RedisObject, rankRange rankRange, rev bool) ([]zsetEntry, error) {
+	if err := obj.checkType(ObjectTypeZSet); err != nil {
+		return nil, err
+	}
 
 	switch obj.encoding {
-	case EncodingSkipList:
-		zs, err := zsetSkiplistValue(obj)
+	case ObjectEncodingZSetSkiplist:
+		zs, err := zsetSkiplistFromObject(obj)
 
 		if err != nil {
 			return nil, err
@@ -246,10 +294,13 @@ func zsetTypeRangeByRank(obj *RedisObject, rankRange rankRange, rev bool) ([]zse
 
 }
 
-func zsetTypeRangeByScore(obj *RedisObject, r scoreRange) ([]zsetEntry, error) {
+func zsetRangeByScore(obj *RedisObject, r scoreRange) ([]zsetEntry, error) {
+	if err := obj.checkType(ObjectTypeZSet); err != nil {
+		return nil, err
+	}
 	switch obj.encoding {
-	case EncodingSkipList:
-		zs, err := zsetSkiplistValue(obj)
+	case ObjectEncodingZSetSkiplist:
+		zs, err := zsetSkiplistFromObject(obj)
 		if err != nil {
 			return nil, err
 		}
@@ -270,14 +321,14 @@ func zsetTypeRangeByScore(obj *RedisObject, r scoreRange) ([]zsetEntry, error) {
 
 func getZsetForWrite(db *RedisDb, key string) (*zset, error) {
 
-	rObj, exists := db.lookupKey(key)
+	rObj, exists, _ := db.lookupKey(key)
 
 	if !exists {
-		rObj = newZsetObject()
+		rObj = newZSetObject()
 		db.setKey(key, rObj)
 	}
 
-	zset, err := zsetSkiplistValue(rObj)
+	zset, err := zsetSkiplistFromObject(rObj)
 
 	if err != nil {
 		return nil, err
@@ -287,12 +338,12 @@ func getZsetForWrite(db *RedisDb, key string) (*zset, error) {
 }
 
 func getZsetForRead(db *RedisDb, key string) (*zset, bool, error) {
-	rObj, exists := db.lookupKey(key)
+	rObj, exists, _ := db.lookupKey(key)
 	if !exists {
 		return nil, false, nil
 	}
 
-	zset, err := zsetSkiplistValue(rObj)
+	zset, err := zsetSkiplistFromObject(rObj)
 
 	if err != nil {
 		return nil, false, err
@@ -301,13 +352,12 @@ func getZsetForRead(db *RedisDb, key string) (*zset, bool, error) {
 	return zset, true, nil
 }
 
-func newZsetObject() *RedisObject {
-	return &RedisObject{
-		typ:       ZSetObject,
-		encoding:  EncodingSkipList,
-		ptr:       createZset(),
-		expiresAt: noExpiration,
-	}
+func newZSetObject() *RedisObject {
+	return newObject(
+		ObjectTypeZSet,
+		ObjectEncodingZSetSkiplist,
+		createZset(),
+	)
 }
 
 type zPopOptions struct {
@@ -315,10 +365,14 @@ type zPopOptions struct {
 	count  int
 }
 
-func zsetTypePop(o *RedisObject, min bool, count int) (poppedElements []zsetEntry, err error) {
+func zsetPop(o *RedisObject, min bool, count int) (poppedElements []zsetEntry, err error) {
+	if err := o.checkType(ObjectTypeZSet); err != nil {
+		return nil, err
+	}
+
 	switch o.encoding {
-	case EncodingSkipList:
-		z, err := zsetSkiplistValue(o)
+	case ObjectEncodingZSetSkiplist:
+		z, err := zsetSkiplistFromObject(o)
 
 		if err != nil {
 			return poppedElements, err
@@ -343,7 +397,7 @@ func formatScore(score float64) string {
 	return strconv.FormatFloat(score, 'g', -1, 64)
 }
 
-func parseZsetPairs(args []string) (pairs []struct {
+func parseZSetPairs(args []string) (pairs []struct {
 	score  float64
 	member string
 }, err error) {
@@ -369,7 +423,7 @@ func parseZsetPairs(args []string) (pairs []struct {
 	return pairs, nil
 }
 
-func Zadd(c *Client, args []string) CommandResult {
+func ZAdd(c *Client, args []string) CommandResult {
 	// > ZADD racer_scores 8 "Sam-Bodden" 10 "Royce" 6 "Ford" 14 "Prickett"
 
 	// returns number of added (not changed) members\
@@ -381,9 +435,9 @@ func Zadd(c *Client, args []string) CommandResult {
 	// incr: increment members score by score rather the setting, but only allows 1 pair
 	key := args[0]
 
-	zops, sIdx := parseZaddOptions(args[1:])
+	zops, sIdx := parseZAddOptions(args[1:])
 
-	pairs, err := parseZsetPairs(args[sIdx:])
+	pairs, err := parseZSetPairs(args[sIdx:])
 
 	if err != nil {
 		return Failed(Error(err.Error()))
@@ -391,18 +445,18 @@ func Zadd(c *Client, args []string) CommandResult {
 
 	added := 0
 
-	robj, exists := c.db.lookupKey(key)
+	robj, exists, _ := c.db.lookupKey(key)
 
 	if !exists {
-		robj = newZsetObject()
+		robj = newZSetObject()
 		c.db.setKeyLocked(key, robj)
 	}
 
 	for _, vals := range pairs {
-		addRes, err := zsetTypeAdd(robj, zsetEntry{Member: vals.member, Score: vals.score}, zops)
+		addRes, err := zsetAdd(robj, zsetEntry{Member: vals.member, Score: vals.score}, zops)
 
 		if err != nil {
-			return Failed(Error(err.Error()))
+			return commandFailure(err)
 		}
 
 		if addRes.Added {
@@ -430,16 +484,16 @@ func ZIncrBy(c *Client, args []string) CommandResult {
 		return Failed(syntaxError())
 	}
 
-	o, exists := c.db.lookupKey(key)
+	o, exists, _ := c.db.lookupKey(key)
 
 	if !exists {
-		o = newZsetObject()
+		o = newZSetObject()
 	}
 
-	addRes, err := zsetTypeAdd(o, zsetEntry{Member: member, Score: incr}, zsetAddOptions{Incr: true})
+	addRes, err := zsetAdd(o, zsetEntry{Member: member, Score: incr}, zsetAddOptions{Incr: true})
 
 	if err != nil {
-		return Failed(Error(err.Error()))
+		return commandFailure(err)
 	}
 
 	return Result(BulkString(formatScore(addRes.Score)))
@@ -450,14 +504,14 @@ func ZCard(c *Client, args []string) CommandResult {
 	key := args[0]
 
 	count := 0
-	rObj, exists := c.db.lookupKey(key)
+	rObj, exists, _ := c.db.lookupKey(key)
 
 	if exists {
 
-		len, err := zsetTypeLen(rObj)
+		len, err := zsetCardinality(rObj)
 
 		if err != nil {
-			return Failed(Error(err.Error()))
+			return commandFailure(err)
 		}
 		count = int(len)
 	}
@@ -474,15 +528,15 @@ func ZCount(c *Client, args []string) CommandResult {
 		return Failed(Error(err.Error()))
 	}
 
-	o, exists := c.db.lookupKey(key)
+	o, exists, _ := c.db.lookupKey(key)
 
 	count := 0
 
 	if exists {
-		entries, err := zsetTypeRangeByScore(o, sr)
+		entries, err := zsetRangeByScore(o, sr)
 
 		if err != nil {
-			return Failed(Error(err.Error()))
+			return commandFailure(err)
 		}
 
 		count = len(entries)
@@ -502,16 +556,16 @@ func ZRank(c *Client, args []string) CommandResult {
 		return Failed(wrongArgs("ZRANK"))
 	}
 
-	obj, exists := c.db.lookupKey(key)
+	obj, exists, _ := c.db.lookupKey(key)
 
 	if !exists {
 		return Result(Null())
 	}
 
-	rank, found, err := zsetTypeRank(obj, member)
+	rank, found, err := zsetRank(obj, member)
 
 	if err != nil {
-		return Failed(Error(err.Error()))
+		return commandFailure(err)
 	}
 
 	if !found {
@@ -583,7 +637,7 @@ func zNodesToMembersArray(node []*zslNode, withScores bool) []Value {
 	return vArray
 }
 
-func parseZrangeOptions(optionalArgs []string) (options zrangeOptions, err error) {
+func parseZRangeOptions(optionalArgs []string) (options zrangeOptions, err error) {
 
 	for i, arg := range optionalArgs {
 
@@ -640,13 +694,13 @@ func ZRange(c *Client, args []string) CommandResult {
 
 	key, startRaw, stopRaw, optionalArgs := args[0], args[1], args[2], args[3:]
 
-	options, err := parseZrangeOptions(optionalArgs)
+	options, err := parseZRangeOptions(optionalArgs)
 
 	if err != nil {
 		return Failed(Error(err.Error()))
 	}
 
-	o, exists := c.db.lookupKey(key)
+	o, exists, _ := c.db.lookupKey(key)
 
 	var responseEntries []zsetEntry
 
@@ -659,14 +713,14 @@ func ZRange(c *Client, args []string) CommandResult {
 				return Failed(Error(err.Error()))
 			}
 
-			responseEntries, err = zsetTypeRangeByRank(o, rr, options.reverse)
+			responseEntries, err = zsetRangeByRank(o, rr, options.reverse)
 		case zrangeByScore:
 			sr, err := parseScoreRange(startRaw, stopRaw)
 			if err != nil {
 				return Failed(Error(err.Error()))
 			}
 
-			responseEntries, err = zsetTypeRangeByScore(o, sr)
+			responseEntries, err = zsetRangeByScore(o, sr)
 
 		default:
 			return Failed(internalError())
@@ -674,25 +728,25 @@ func ZRange(c *Client, args []string) CommandResult {
 	}
 
 	if err != nil {
-		return Failed(Error(err.Error()))
+		return commandFailure(err)
 	}
 
-	return Result(Array(serializeZsetEntries(responseEntries, options.withScores)))
+	return Result(Array(serializeZSetEntries(responseEntries, options.withScores)))
 }
 
 func ZRem(c *Client, args []string) CommandResult {
 
 	key, members := args[0], args[1:]
 
-	o, exists := c.db.lookupKey(key)
+	o, exists, _ := c.db.lookupKey(key)
 
 	remCount := 0
 	if exists {
 		for _, m := range members {
 
-			removed, err := zsetTypeRemove(o, m)
+			removed, err := zsetRemove(o, m)
 			if err != nil {
-				return Failed(Error(err.Error()))
+				return commandFailure(err)
 			}
 			if removed {
 				remCount++
@@ -708,20 +762,20 @@ func ZRemRangeByRank(c *Client, args []string) CommandResult {
 	if err != nil {
 		return Failed(Error(err.Error()))
 	}
-	o, exists := c.db.lookupKey(key)
+	o, exists, _ := c.db.lookupKey(key)
 	membersRemoved := 0
 
 	if exists {
-		entries, err := zsetTypeRangeByRank(o, rr, false)
+		entries, err := zsetRangeByRank(o, rr, false)
 
 		if err != nil {
-			return Failed(Error(err.Error()))
+			return commandFailure(err)
 		}
 
 		for _, n := range entries {
-			removed, err := zsetTypeRemove(o, n.Member)
+			removed, err := zsetRemove(o, n.Member)
 			if err != nil {
-				return Failed(Error(err.Error()))
+				return commandFailure(err)
 			}
 			if removed {
 				membersRemoved++
@@ -742,22 +796,22 @@ func ZRemRangeByScore(c *Client, args []string) CommandResult {
 		return Failed(Error(err.Error()))
 	}
 
-	o, exists := c.db.lookupKey(key)
+	o, exists, _ := c.db.lookupKey(key)
 
 	membersRemoved := 0
 
 	if exists {
-		entries, err := zsetTypeRangeByScore(o, sr)
+		entries, err := zsetRangeByScore(o, sr)
 
 		if err != nil {
-			return Failed(Error(err.Error()))
+			return commandFailure(err)
 		}
 
 		for _, e := range entries {
-			removed, err := zsetTypeRemove(o, e.Member)
+			removed, err := zsetRemove(o, e.Member)
 
 			if err != nil {
-				return Failed(Error(err.Error()))
+				return commandFailure(err)
 			}
 
 			if removed {
@@ -772,16 +826,16 @@ func ZRemRangeByScore(c *Client, args []string) CommandResult {
 func ZScore(c *Client, args []string) CommandResult {
 	key, member := args[0], args[1]
 
-	rObj, exists := c.db.lookupKey(key)
+	rObj, exists, _ := c.db.lookupKey(key)
 
 	if !exists {
 		return Result(Null())
 	}
 
-	score, found, err := zsetTypeScore(rObj, member)
+	score, found, err := zsetScore(rObj, member)
 
 	if err != nil {
-		return Failed(Error(err.Error()))
+		return commandFailure(err)
 	}
 
 	if !found {
@@ -792,7 +846,7 @@ func ZScore(c *Client, args []string) CommandResult {
 
 }
 
-func serializeZsetEntries(entries []zsetEntry, withScores bool) []Value {
+func serializeZSetEntries(entries []zsetEntry, withScores bool) []Value {
 
 	respArraySize := len(entries)
 
@@ -829,18 +883,18 @@ func ZPopMax(c *Client, args []string) CommandResult {
 		count = c
 	}
 	var poppedEntires []zsetEntry
-	o, exists := c.db.lookupKey(key)
+	o, exists, _ := c.db.lookupKey(key)
 
 	if exists {
-		r, err := zsetTypePop(o, false, int(count))
+		r, err := zsetPop(o, false, int(count))
 
 		if err != nil {
-			return Failed(Error(err.Error()))
+			return commandFailure(err)
 		}
 		poppedEntires = r
 	}
 
-	return Result(Array(serializeZsetEntries(poppedEntires, true)))
+	return Result(Array(serializeZSetEntries(poppedEntires, true)))
 }
 
 func ZPopMin(c *Client, args []string) CommandResult {
@@ -859,18 +913,18 @@ func ZPopMin(c *Client, args []string) CommandResult {
 	}
 
 	var popped []zsetEntry
-	o, exists := c.db.lookupKey(key)
+	o, exists, _ := c.db.lookupKey(key)
 	if exists {
-		r, err := zsetTypePop(o, true, int(count))
+		r, err := zsetPop(o, true, int(count))
 
 		if err != nil {
-			return Failed(Error(err.Error()))
+			return commandFailure(err)
 		}
 
 		popped = r
 	}
 
-	return Result(Array(serializeZsetEntries(popped, true)))
+	return Result(Array(serializeZSetEntries(popped, true)))
 }
 
 func ZMPop(c *Client, args []string) CommandResult {
@@ -912,19 +966,19 @@ func ZMPop(c *Client, args []string) CommandResult {
 	}
 
 	for _, k := range keys {
-		o, exists := c.db.lookupKey(k)
+		o, exists, _ := c.db.lookupKey(k)
 
 		if !exists {
 			continue
 		}
 
-		centries, err := zsetTypePop(o, !popMax, int(count))
+		centries, err := zsetPop(o, !popMax, int(count))
 
 		if err != nil {
-			return Failed(Error(err.Error()))
+			return commandFailure(err)
 		}
 		if len(centries) > 0 {
-			return Result(Array([]Value{BulkString(k), Array(serializeZsetEntries(centries, true))}))
+			return Result(Array([]Value{BulkString(k), Array(serializeZSetEntries(centries, true))}))
 		}
 	}
 

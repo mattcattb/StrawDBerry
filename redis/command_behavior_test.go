@@ -3,6 +3,7 @@ package redis
 import (
 	"sort"
 	"testing"
+	"time"
 )
 
 type recordingAof struct {
@@ -11,6 +12,15 @@ type recordingAof struct {
 
 func (a *recordingAof) Append(v Value) error {
 	a.commands = append(a.commands, v)
+	return nil
+}
+
+func (a *recordingAof) Replay(_ *Client, execute func(Value) error) error {
+	for _, command := range a.commands {
+		if err := execute(command); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -102,7 +112,7 @@ func TestHDelAcceptsMultipleFieldsAndDeletesEmptyHash(t *testing.T) {
 	if got := replyInteger(t, result); got != 2 {
 		t.Fatalf("HDEL count = %d, want 2", got)
 	}
-	if _, exists := c.db.lookupKey("profile"); exists {
+	if _, exists, _ := c.db.lookupKey("profile"); exists {
 		t.Fatal("hash key still exists after deleting its final fields")
 	}
 }
@@ -110,7 +120,7 @@ func TestHDelAcceptsMultipleFieldsAndDeletesEmptyHash(t *testing.T) {
 func TestSRemReturnsDeletedCountPersistsAndDeletesEmptySet(t *testing.T) {
 	c := newStringCommandTestClient()
 	log := &recordingAof{}
-	c.aof = log
+	c.server.aof = log
 	SAdd(c, []string{"tags", "go", "redis"})
 
 	result := c.HandleCommand(redisCommand("SREM", "tags", "go", "redis", "missing"))
@@ -120,7 +130,7 @@ func TestSRemReturnsDeletedCountPersistsAndDeletesEmptySet(t *testing.T) {
 	if len(log.commands) != 1 {
 		t.Fatalf("AOF command count = %d, want 1", len(log.commands))
 	}
-	if _, exists := c.db.lookupKey("tags"); exists {
+	if _, exists, _ := c.db.lookupKey("tags"); exists {
 		t.Fatal("set key still exists after deleting its final members")
 	}
 }
@@ -165,7 +175,7 @@ func TestSetGetReturnsOldValueAndKeepTTLRetainsExpiration(t *testing.T) {
 	if result := c.HandleCommand(redisCommand("SET", "name", "before", "PX", "5000")); result.Failed {
 		t.Fatalf("initial SET failed: %#v", result.Reply)
 	}
-	before, _ := c.db.lookupKey("name")
+	before, _, _ := c.db.lookupKey("name")
 	expiresAt := before.expiresAt
 
 	result := c.HandleCommand(redisCommand("SET", "name", "after", "GET", "KEEPTTL"))
@@ -177,7 +187,7 @@ func TestSetGetReturnsOldValueAndKeepTTLRetainsExpiration(t *testing.T) {
 		t.Fatalf("SET GET reply = %q, %v; want %q, true", old, ok, "before")
 	}
 
-	after, _ := c.db.lookupKey("name")
+	after, _, _ := c.db.lookupKey("name")
 	if after.expiresAt != expiresAt {
 		t.Fatalf("expiresAt = %d, want retained value %d", after.expiresAt, expiresAt)
 	}
@@ -196,7 +206,7 @@ func TestSetRejectsUnknownConflictingAndNonPositiveExpirationOptions(t *testing.
 			if result := c.HandleCommand(redisCommand(command...)); !result.Failed {
 				t.Fatalf("%v unexpectedly succeeded", command)
 			}
-			if _, exists := c.db.lookupKey(command[1]); exists {
+			if _, exists, _ := c.db.lookupKey(command[1]); exists {
 				t.Fatalf("%q was created by rejected SET", command[1])
 			}
 		})
@@ -206,7 +216,7 @@ func TestSetRejectsUnknownConflictingAndNonPositiveExpirationOptions(t *testing.
 func TestPersistOnlyMutatesAKeyWithExpiration(t *testing.T) {
 	c := newStringCommandTestClient()
 	log := &recordingAof{}
-	c.aof = log
+	c.server.aof = log
 	Set(c, []string{"session", "value", "PX", "5000"})
 
 	if got := replyInteger(t, c.HandleCommand(redisCommand("PERSIST", "session"))); got != 1 {
@@ -223,7 +233,7 @@ func TestPersistOnlyMutatesAKeyWithExpiration(t *testing.T) {
 func TestFlushAllIsReplayedByAOF(t *testing.T) {
 	c := newStringCommandTestClient()
 	log := &recordingAof{}
-	c.aof = log
+	c.server.aof = log
 
 	c.HandleCommand(redisCommand("SET", "ghost", "value"))
 	c.HandleCommand(redisCommand("FLUSHALL"))
@@ -244,5 +254,104 @@ func TestPingRejectsMoreThanOneArgument(t *testing.T) {
 	c := newStringCommandTestClient()
 	if result := c.HandleCommand(redisCommand("PING", "one", "two")); !result.Failed {
 		t.Fatalf("PING with two arguments unexpectedly succeeded: %#v", result.Reply)
+	}
+}
+
+func TestCopyClonesMutablePayloads(t *testing.T) {
+	t.Run("hash", func(t *testing.T) {
+		c := newStringCommandTestClient()
+		source := newHashObject()
+		if _, err := hashSet(source, "name", "before"); err != nil {
+			t.Fatal(err)
+		}
+		c.db.setKey("source", source)
+
+		if got := replyInteger(t, Copy(c, []string{"source", "clone"})); got != 1 {
+			t.Fatalf("COPY = %d, want 1", got)
+		}
+		if _, err := hashSet(source, "name", "after"); err != nil {
+			t.Fatal(err)
+		}
+
+		clone, exists, _ := c.db.lookupKey("clone")
+		if !exists {
+			t.Fatal("cloned hash does not exist")
+		}
+		value, found, err := hashGet(clone, "name")
+		if err != nil || !found || value != "before" {
+			t.Fatalf("cloned hash value = %q, found=%v, err=%v; want before", value, found, err)
+		}
+	})
+
+	t.Run("set", func(t *testing.T) {
+		c := newStringCommandTestClient()
+		source := newSetObject()
+		if _, err := setAdd(source, "before"); err != nil {
+			t.Fatal(err)
+		}
+		c.db.setKey("source", source)
+
+		if got := replyInteger(t, Copy(c, []string{"source", "clone"})); got != 1 {
+			t.Fatalf("COPY = %d, want 1", got)
+		}
+		if _, err := setAdd(source, "after"); err != nil {
+			t.Fatal(err)
+		}
+
+		clone, exists, _ := c.db.lookupKey("clone")
+		if !exists {
+			t.Fatal("cloned set does not exist")
+		}
+		contains, err := setContains(clone, "after")
+		if err != nil || contains {
+			t.Fatalf("cloned set contains later source member: contains=%v, err=%v", contains, err)
+		}
+	})
+
+	t.Run("zset", func(t *testing.T) {
+		c := newStringCommandTestClient()
+		source := newZSetObject()
+		if _, err := zsetAdd(source, zsetEntry{Member: "member", Score: 1}, zsetAddOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		c.db.setKey("source", source)
+
+		if got := replyInteger(t, Copy(c, []string{"source", "clone"})); got != 1 {
+			t.Fatalf("COPY = %d, want 1", got)
+		}
+		if _, err := zsetAdd(source, zsetEntry{Member: "member", Score: 2}, zsetAddOptions{}); err != nil {
+			t.Fatal(err)
+		}
+
+		clone, exists, _ := c.db.lookupKey("clone")
+		if !exists {
+			t.Fatal("cloned zset does not exist")
+		}
+		score, found, err := zsetScore(clone, "member")
+		if err != nil || !found || score != 1 {
+			t.Fatalf("cloned zset score = %v, found=%v, err=%v; want 1", score, found, err)
+		}
+	})
+}
+
+func TestCopyPreservesStringEncodingAndExpiration(t *testing.T) {
+	c := newStringCommandTestClient()
+	source := newStringObject("42")
+	source.expiresAt = time.Now().Add(time.Minute).UnixMilli()
+	c.db.setKey("source", source)
+
+	if got := replyInteger(t, Copy(c, []string{"source", "clone"})); got != 1 {
+		t.Fatalf("COPY = %d, want 1", got)
+	}
+
+	clone, exists, _ := c.db.lookupKey("clone")
+	if !exists {
+		t.Fatal("cloned string does not exist")
+	}
+	if clone.encoding != source.encoding {
+		t.Fatalf("clone encoding = %v, want %v", clone.encoding, source.encoding)
+	}
+	if clone.expiresAt != source.expiresAt {
+		t.Fatalf("clone expiration = %d, want %d", clone.expiresAt, source.expiresAt)
 	}
 }
