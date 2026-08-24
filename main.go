@@ -44,7 +44,9 @@ func main() {
 
 	srv := redis.NewServer(db, aof, sh)
 	srv.RegisterCMDTable()
-	aof.ReplayAOF(redis.NewClient(nil, srv))
+	if err := srv.LoadAOF(); err != nil {
+		panic(fmt.Errorf("load AOF: %w", err))
+	}
 
 	fmt.Println("Listening on port ", cfg.server.Addr)
 

@@ -5,6 +5,13 @@ import (
 	"strings"
 )
 
+type CommandArgument struct{}
+
+type CommandDocs struct {
+	Summary   string
+	Arguments []CommandArgument
+}
+
 type CommandGroup string
 
 const (
@@ -38,6 +45,7 @@ type Command struct {
 	Group       CommandGroup
 	Flags       CommandFlags
 	subcommands map[string]Command
+	Docs        CommandDocs
 }
 
 type ResolvedCommand struct {

@@ -11,9 +11,7 @@ func newStringCommandTestClient() *Client {
 
 	server.RegisterCMDTable()
 
-	client := NewClient(nil, server)
-	client.aof = &DummyAofLog{}
-	return client
+	return NewClient(nil, server)
 }
 
 func TestStringCommandSetThenGet(t *testing.T) {
@@ -108,7 +106,7 @@ func TestStringCommandSetStoresNoExpirationByDefault(t *testing.T) {
 		t.Fatalf("SET failed: %#v", res.Reply)
 	}
 
-	obj, exists := c.db.lookupKey("name")
+	obj, exists, _ := c.db.lookupKey("name")
 	if !exists {
 		t.Fatal("expected key to exist")
 	}
@@ -126,7 +124,7 @@ func TestStringCommandSetPxStoresUnixMsExpiration(t *testing.T) {
 		t.Fatalf("SET PX failed: %#v", res.Reply)
 	}
 
-	obj, exists := c.db.lookupKey("name")
+	obj, exists, _ := c.db.lookupKey("name")
 	if !exists {
 		t.Fatal("expected key to exist")
 	}

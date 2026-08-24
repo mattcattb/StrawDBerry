@@ -1,59 +1,121 @@
 package redis
 
-func newHashRObject() *RedisObject {
-	return &RedisObject{
-		typ:       HashObject,
-		encoding:  EncodingHashMap,
-		ptr:       hashMapPayload(map[string]string{}),
-		expiresAt: noExpiration,
-	}
+import "maps"
+
+func newHashObject() *RedisObject {
+	return newObject(
+		ObjectTypeHash,
+		ObjectEncodingHashMap,
+		make(hashMapPayload),
+	)
 }
 
-func hashObjValue(obj *RedisObject) (map[string]string, error) {
-
-	var newMap map[string]string
-	if obj.typ != HashObject {
-		return newMap, ErrWrongType
+func hashMapFromObject(obj *RedisObject) (hashMapPayload, error) {
+	if err := obj.checkType(ObjectTypeHash); err != nil {
+		return nil, err
 	}
 
-	switch obj.encoding {
-	case EncodingHashMap:
-		val, ok := obj.ptr.(hashMapPayload)
-		if !ok {
-			return newMap, ErrInvalidEncoding
-		}
-
-		return val, nil
+	if obj.encoding != ObjectEncodingHashMap {
+		return nil, ErrInvalidEncoding
 	}
 
-	return newMap, ErrInvalidEncoding
+	hash, ok := obj.payload.(hashMapPayload)
+	if !ok {
+		return nil, ErrInvalidEncoding
+	}
+
+	return hash, nil
 }
 
-func hashTypeSet(obj *RedisObject, key, value string) (bool, error) {
-
-	hash, err := hashObjValue(obj)
+func cloneHashPayload(obj *RedisObject) (objectPayload, error) {
+	hash, err := hashMapFromObject(obj)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
-	_, exists := hash[key]
-	hash[key] = value
-
-	return exists, nil
+	return maps.Clone(hash), nil
 }
 
-func hashTypeGet(obj *RedisObject, field string) (string, bool, error) {
-	hash, err := hashObjValue(obj) // set this a bit more here !!!!
+type hashSetResult struct {
+	added   bool
+	changed bool
+}
+
+func hashSet(obj *RedisObject, field, value string) (hashSetResult, error) {
+
+	hash, err := hashMapFromObject(obj)
+	if err != nil {
+		return hashSetResult{}, err
+	}
+
+	oldValue, exists := hash[field]
+	hash[field] = value
+
+	return hashSetResult{
+		added:   !exists,
+		changed: !exists || oldValue != value,
+	}, nil
+}
+
+func hashGet(obj *RedisObject, field string) (string, bool, error) {
+	hash, err := hashMapFromObject(obj)
 	if err != nil {
 		return "", false, err
 	}
 
 	val, exists := hash[field]
 
-	return val, exists, err
+	return val, exists, nil
 }
-func hashTypeDel(obj *RedisObject, fields ...string) (deleted int, err error) {
-	return deleted, err
+
+func hashDelete(obj *RedisObject, fields ...string) (deleted int, err error) {
+	hash, err := hashMapFromObject(obj)
+	if err != nil {
+		return 0, err
+	}
+
+	for _, field := range fields {
+		if _, exists := hash[field]; !exists {
+			continue
+		}
+		delete(hash, field)
+		deleted++
+	}
+
+	return deleted, nil
+}
+
+func hashExists(obj *RedisObject, field string) (exists bool, err error) {
+	hash, err := hashMapFromObject(obj)
+
+	if err != nil {
+		return false, err
+	}
+	_, ok := hash[field]
+
+	return ok, nil
+
+}
+
+func hashCardinality(obj *RedisObject) (int, error) {
+	hash, err := hashMapFromObject(obj)
+	if err != nil {
+		return 0, err
+	}
+	return len(hash), nil
+}
+
+func hashEntries(obj *RedisObject) ([][2]string, error) {
+	hash, err := hashMapFromObject(obj)
+	if err != nil {
+		return nil, err
+	}
+
+	entries := make([][2]string, 0, len(hash))
+	for field, value := range hash {
+		entries = append(entries, [2]string{field, value})
+	}
+	return entries, nil
 }
 
 func HGet(c *Client, args []string) CommandResult {
@@ -64,23 +126,22 @@ func HGet(c *Client, args []string) CommandResult {
 	c.db.mu.Lock()
 	defer c.db.mu.Unlock()
 
-	obj, exists := c.db.lookupKeyLocked(key)
+	obj, exists, _ := c.db.lookupKeyLocked(key)
 
 	if !exists {
 		return Result(Null())
 	}
 
-	hash, err := hashObjValue(obj)
+	value, found, err := hashGet(obj, field)
 	if err != nil {
-		return Failed(wrongTypeError())
+		return commandFailure(err)
 	}
 
-	val, exists := hash[field]
-	if !exists {
+	if !found {
 		return Result(Null())
 	}
 
-	return Result(BulkString(val))
+	return Result(BulkString(value))
 
 }
 
@@ -99,31 +160,26 @@ func HSet(c *Client, args []string) CommandResult {
 	setCount := 0
 	changed := false
 
-	obj, exists := c.db.lookupKeyLocked(key)
+	obj, exists, _ := c.db.lookupKeyLocked(key)
 
 	if !exists {
-		obj = newHashRObject()
-	}
-
-	hashObj, err := hashObjValue(obj)
-	if err != nil {
-		return Failed(wrongTypeError())
+		obj = newHashObject()
 	}
 
 	for i := 0; i < len(kvArray); i += 2 {
 		field, value := kvArray[i], kvArray[i+1]
 
-		oldValue, fieldExists := hashObj[field]
-		if !fieldExists {
+		result, err := hashSet(obj, field, value)
+		if err != nil {
+			return commandFailure(err)
+		}
+		if result.added {
 			setCount += 1
 		}
-		if !fieldExists || oldValue != value {
+		if result.changed {
 			changed = true
 		}
-		hashObj[field] = value
 	}
-
-	obj.ptr = hashMapPayload(hashObj)
 
 	c.db.setKeyLocked(key, obj)
 	if changed {
@@ -140,30 +196,24 @@ func HDel(c *Client, args []string) CommandResult {
 	c.db.mu.Lock()
 	defer c.db.mu.Unlock()
 
-	obj, exists := c.db.lookupKeyLocked(key)
+	obj, exists, _ := c.db.lookupKeyLocked(key)
 
 	if !exists {
 		return Result(Integer(0))
 	}
 
-	hash, err := hashObjValue(obj)
-
+	delCount, err := hashDelete(obj, fieldValues...)
 	if err != nil {
-		return Failed(wrongTypeError())
-	}
-
-	delCount := 0
-	for _, delField := range fieldValues {
-		_, exists := hash[delField]
-		if exists {
-			delete(hash, delField)
-			delCount += 1
-		}
+		return commandFailure(err)
 	}
 
 	if delCount > 0 {
 		c.server.dirty += 1
-		if len(hash) == 0 {
+		remaining, err := hashCardinality(obj)
+		if err != nil {
+			return commandFailure(err)
+		}
+		if remaining == 0 {
 			delete(c.db.dict, key)
 			c.db.stats.deletedKeys++
 		}
@@ -183,21 +233,21 @@ func HGetAll(c *Client, args []string) CommandResult {
 	c.db.mu.Lock()
 	defer c.db.mu.Unlock()
 
-	obj, exists := c.db.lookupKeyLocked(key)
+	obj, exists, _ := c.db.lookupKeyLocked(key)
 
 	if !exists {
 		return Result(Array([]Value{}))
 	}
 
-	hash, err := hashObjValue(obj)
+	entries, err := hashEntries(obj)
 	if err != nil {
-		return Failed(wrongTypeError())
+		return commandFailure(err)
 	}
 
 	returnValues := make([]Value, 0)
 
-	for field, val := range hash {
-		returnValues = append(returnValues, BulkString(field), BulkString(val))
+	for _, entry := range entries {
+		returnValues = append(returnValues, BulkString(entry[0]), BulkString(entry[1]))
 	}
 
 	return Result(Array(returnValues))
@@ -208,21 +258,18 @@ func HExists(c *Client, args []string) CommandResult {
 	// HEXISTS key field
 	key, field := args[0], args[1]
 
-	obj, exists := c.db.lookupKey(key)
+	obj, exists, _ := c.db.lookupKey(key)
 
 	if !exists {
 		return Result(Integer(0))
 	}
 
-	hash, err := hashObjValue(obj)
-
+	found, err := hashExists(obj, field)
 	if err != nil {
-		return Failed(wrongTypeError())
+		return commandFailure(err)
 	}
 
-	_, exists = hash[field]
-
-	if exists {
+	if found {
 		return Result(Integer(1))
 	}
 

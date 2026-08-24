@@ -1,45 +1,56 @@
 package redis
 
 import (
-	"errors"
+	"maps"
 	"sort"
 )
 
-func newSetObj() *RedisObject {
-	return &RedisObject{
-		typ:       SetObject,
-		encoding:  EncodingSetMap,
-		ptr:       setMapPayload{},
-		expiresAt: noExpiration,
-	}
+func newSetObject() *RedisObject {
+	return newObject(
+		ObjectTypeSet,
+		ObjectEncodingSetMap,
+		make(setMapPayload),
+	)
 }
 
-// setMapValue returns the map representation of a set. Semantic set
-// operations should use the setType helpers instead so callers do not depend
-// on a particular encoding.
-func setMapValue(obj *RedisObject) (setMapPayload, error) {
-	if err := checkObjectType(obj, SetObject); err != nil {
+func cloneSetPayload(obj *RedisObject) (objectPayload, error) {
+
+	set, err := setMapFromObject(obj)
+
+	if err != nil {
 		return nil, err
 	}
-	if obj.encoding != EncodingSetMap {
+
+	return maps.Clone(set), nil
+
+}
+
+// setMapFromObject returns the map representation of a set. Semantic set
+// operations should use the set behavior helpers instead so callers do not depend
+// on a particular encoding.
+func setMapFromObject(obj *RedisObject) (setMapPayload, error) {
+	if err := obj.checkType(ObjectTypeSet); err != nil {
+		return nil, err
+	}
+	if obj.encoding != ObjectEncodingSetMap {
 		return nil, ErrInvalidEncoding
 	}
 
-	set, ok := obj.ptr.(setMapPayload)
+	set, ok := obj.payload.(setMapPayload)
 	if !ok {
 		return nil, ErrInvalidEncoding
 	}
 	return set, nil
 }
 
-func setTypeCardinality(obj *RedisObject) (int, error) {
-	if err := checkObjectType(obj, SetObject); err != nil {
+func setCardinality(obj *RedisObject) (int, error) {
+	if err := obj.checkType(ObjectTypeSet); err != nil {
 		return 0, err
 	}
 
 	switch obj.encoding {
-	case EncodingSetMap:
-		set, err := setMapValue(obj)
+	case ObjectEncodingSetMap:
+		set, err := setMapFromObject(obj)
 		if err != nil {
 			return 0, err
 		}
@@ -49,14 +60,14 @@ func setTypeCardinality(obj *RedisObject) (int, error) {
 	}
 }
 
-func setTypeAdd(obj *RedisObject, members ...string) (int, error) {
-	if err := checkObjectType(obj, SetObject); err != nil {
+func setAdd(obj *RedisObject, members ...string) (int, error) {
+	if err := obj.checkType(ObjectTypeSet); err != nil {
 		return 0, err
 	}
 
 	switch obj.encoding {
-	case EncodingSetMap:
-		set, err := setMapValue(obj)
+	case ObjectEncodingSetMap:
+		set, err := setMapFromObject(obj)
 		if err != nil {
 			return 0, err
 		}
@@ -75,14 +86,14 @@ func setTypeAdd(obj *RedisObject, members ...string) (int, error) {
 	}
 }
 
-func setTypeRemove(obj *RedisObject, members ...string) (int, error) {
-	if err := checkObjectType(obj, SetObject); err != nil {
+func setRemove(obj *RedisObject, members ...string) (int, error) {
+	if err := obj.checkType(ObjectTypeSet); err != nil {
 		return 0, err
 	}
 
 	switch obj.encoding {
-	case EncodingSetMap:
-		set, err := setMapValue(obj)
+	case ObjectEncodingSetMap:
+		set, err := setMapFromObject(obj)
 		if err != nil {
 			return 0, err
 		}
@@ -101,14 +112,14 @@ func setTypeRemove(obj *RedisObject, members ...string) (int, error) {
 	}
 }
 
-func setTypeContains(obj *RedisObject, member string) (bool, error) {
-	if err := checkObjectType(obj, SetObject); err != nil {
+func setContains(obj *RedisObject, member string) (bool, error) {
+	if err := obj.checkType(ObjectTypeSet); err != nil {
 		return false, err
 	}
 
 	switch obj.encoding {
-	case EncodingSetMap:
-		set, err := setMapValue(obj)
+	case ObjectEncodingSetMap:
+		set, err := setMapFromObject(obj)
 		if err != nil {
 			return false, err
 		}
@@ -119,14 +130,14 @@ func setTypeContains(obj *RedisObject, member string) (bool, error) {
 	}
 }
 
-func setTypeMembers(obj *RedisObject) ([]string, error) {
-	if err := checkObjectType(obj, SetObject); err != nil {
+func setMembers(obj *RedisObject) ([]string, error) {
+	if err := obj.checkType(ObjectTypeSet); err != nil {
 		return nil, err
 	}
 
 	switch obj.encoding {
-	case EncodingSetMap:
-		set, err := setMapValue(obj)
+	case ObjectEncodingSetMap:
+		set, err := setMapFromObject(obj)
 		if err != nil {
 			return nil, err
 		}
@@ -141,15 +152,15 @@ func setTypeMembers(obj *RedisObject) ([]string, error) {
 	}
 }
 
-func setTypeDiff(first *RedisObject, rest ...*RedisObject) ([]string, error) {
+func setDiff(first *RedisObject, rest ...*RedisObject) ([]string, error) {
 	if first != nil {
-		if _, err := setTypeCardinality(first); err != nil {
+		if _, err := setCardinality(first); err != nil {
 			return nil, err
 		}
 	}
 	for _, obj := range rest {
 		if obj != nil {
-			if _, err := setTypeCardinality(obj); err != nil {
+			if _, err := setCardinality(obj); err != nil {
 				return nil, err
 			}
 		}
@@ -158,7 +169,7 @@ func setTypeDiff(first *RedisObject, rest ...*RedisObject) ([]string, error) {
 		return []string{}, nil
 	}
 
-	candidates, err := setTypeMembers(first)
+	candidates, err := setMembers(first)
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +181,7 @@ func setTypeDiff(first *RedisObject, rest ...*RedisObject) ([]string, error) {
 			if obj == nil {
 				continue
 			}
-			exists, err := setTypeContains(obj, member)
+			exists, err := setContains(obj, member)
 			if err != nil {
 				return nil, err
 			}
@@ -187,7 +198,7 @@ func setTypeDiff(first *RedisObject, rest ...*RedisObject) ([]string, error) {
 	return result, nil
 }
 
-func setTypeInter(objects ...*RedisObject) ([]string, error) {
+func setInter(objects ...*RedisObject) ([]string, error) {
 	if len(objects) == 0 {
 		return []string{}, nil
 	}
@@ -201,7 +212,7 @@ func setTypeInter(objects ...*RedisObject) ([]string, error) {
 			continue
 		}
 
-		length, err := setTypeCardinality(obj)
+		length, err := setCardinality(obj)
 		if err != nil {
 			return nil, err
 		}
@@ -214,7 +225,7 @@ func setTypeInter(objects ...*RedisObject) ([]string, error) {
 		return []string{}, nil
 	}
 
-	candidates, err := setTypeMembers(objects[smallestIndex])
+	candidates, err := setMembers(objects[smallestIndex])
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +237,7 @@ func setTypeInter(objects ...*RedisObject) ([]string, error) {
 			if i == smallestIndex {
 				continue
 			}
-			exists, err := setTypeContains(obj, member)
+			exists, err := setContains(obj, member)
 			if err != nil {
 				return nil, err
 			}
@@ -243,14 +254,14 @@ func setTypeInter(objects ...*RedisObject) ([]string, error) {
 	return result, nil
 }
 
-func setTypeUnion(objects ...*RedisObject) ([]string, error) {
+func setUnion(objects ...*RedisObject) ([]string, error) {
 	unique := make(map[string]struct{})
 
 	for _, obj := range objects {
 		if obj == nil {
 			continue
 		}
-		members, err := setTypeMembers(obj)
+		members, err := setMembers(obj)
 		if err != nil {
 			return nil, err
 		}
@@ -266,13 +277,6 @@ func setTypeUnion(objects ...*RedisObject) ([]string, error) {
 	return result, nil
 }
 
-func setCommandFailure(err error) CommandResult {
-	if errors.Is(err, ErrWrongType) {
-		return Failed(wrongTypeError())
-	}
-	return Failed(internalError())
-}
-
 func SAdd(c *Client, args []string) CommandResult {
 	key := args[0]
 	members := args[1:]
@@ -280,14 +284,14 @@ func SAdd(c *Client, args []string) CommandResult {
 	c.db.mu.Lock()
 	defer c.db.mu.Unlock()
 
-	obj, exists := c.db.lookupKeyLocked(key)
+	obj, exists, _ := c.db.lookupKeyLocked(key)
 	if !exists {
-		obj = newSetObj()
+		obj = newSetObject()
 	}
 
-	added, err := setTypeAdd(obj, members...)
+	added, err := setAdd(obj, members...)
 	if err != nil {
-		return setCommandFailure(err)
+		return commandFailure(err)
 	}
 	if !exists {
 		c.db.setKeyLocked(key, obj)
@@ -305,14 +309,14 @@ func SCard(c *Client, args []string) CommandResult {
 	c.db.mu.Lock()
 	defer c.db.mu.Unlock()
 
-	obj, exists := c.db.lookupKeyLocked(key)
+	obj, exists, _ := c.db.lookupKeyLocked(key)
 	if !exists {
 		return Result(Integer(0))
 	}
 
-	length, err := setTypeCardinality(obj)
+	length, err := setCardinality(obj)
 	if err != nil {
-		return setCommandFailure(err)
+		return commandFailure(err)
 	}
 	return Result(Integer(length))
 }
@@ -324,23 +328,23 @@ func SRem(c *Client, args []string) CommandResult {
 	c.db.mu.Lock()
 	defer c.db.mu.Unlock()
 
-	obj, exists := c.db.lookupKeyLocked(key)
+	obj, exists, _ := c.db.lookupKeyLocked(key)
 	if !exists {
 		return Result(Integer(0))
 	}
 
-	removed, err := setTypeRemove(obj, members...)
+	removed, err := setRemove(obj, members...)
 	if err != nil {
-		return setCommandFailure(err)
+		return commandFailure(err)
 	}
 	if removed == 0 {
 		return Result(Integer(0))
 	}
 
 	c.server.dirty += uint64(removed)
-	remaining, err := setTypeCardinality(obj)
+	remaining, err := setCardinality(obj)
 	if err != nil {
-		return setCommandFailure(err)
+		return commandFailure(err)
 	}
 	if remaining == 0 {
 		delete(c.db.dict, key)
@@ -358,7 +362,7 @@ func SMIsMem(c *Client, args []string) CommandResult {
 	c.db.mu.Lock()
 	defer c.db.mu.Unlock()
 
-	obj, exists := c.db.lookupKeyLocked(key)
+	obj, exists, _ := c.db.lookupKeyLocked(key)
 	if !exists {
 		for i := range replies {
 			replies[i] = Integer(0)
@@ -367,9 +371,9 @@ func SMIsMem(c *Client, args []string) CommandResult {
 	}
 
 	for i, member := range members {
-		exists, err := setTypeContains(obj, member)
+		exists, err := setContains(obj, member)
 		if err != nil {
-			return setCommandFailure(err)
+			return commandFailure(err)
 		}
 		if exists {
 			replies[i] = Integer(1)
@@ -387,14 +391,14 @@ func SIsMem(c *Client, args []string) CommandResult {
 	c.db.mu.Lock()
 	defer c.db.mu.Unlock()
 
-	obj, exists := c.db.lookupKeyLocked(key)
+	obj, exists, _ := c.db.lookupKeyLocked(key)
 	if !exists {
 		return Result(Integer(0))
 	}
 
-	exists, err := setTypeContains(obj, member)
+	exists, err := setContains(obj, member)
 	if err != nil {
-		return setCommandFailure(err)
+		return commandFailure(err)
 	}
 	if exists {
 		return Result(Integer(1))
@@ -405,11 +409,11 @@ func SIsMem(c *Client, args []string) CommandResult {
 func lookupSetObjectsLocked(db *RedisDb, keys []string) ([]*RedisObject, error) {
 	objects := make([]*RedisObject, len(keys))
 	for i, key := range keys {
-		obj, exists := db.lookupKeyLocked(key)
+		obj, exists, _ := db.lookupKeyLocked(key)
 		if !exists {
 			continue
 		}
-		if err := checkObjectType(obj, SetObject); err != nil {
+		if err := obj.checkType(ObjectTypeSet); err != nil {
 			return nil, err
 		}
 		objects[i] = obj
@@ -433,13 +437,13 @@ func SMembers(c *Client, args []string) CommandResult {
 	c.db.mu.Lock()
 	defer c.db.mu.Unlock()
 
-	obj, exists := c.db.lookupKeyLocked(key)
+	obj, exists, _ := c.db.lookupKeyLocked(key)
 	if !exists {
 		return setMembersReply([]string{})
 	}
-	members, err := setTypeMembers(obj)
+	members, err := setMembers(obj)
 	if err != nil {
-		return setCommandFailure(err)
+		return commandFailure(err)
 	}
 	return setMembersReply(members)
 }
@@ -450,11 +454,11 @@ func SDiff(c *Client, args []string) CommandResult {
 
 	objects, err := lookupSetObjectsLocked(c.db, args)
 	if err != nil {
-		return setCommandFailure(err)
+		return commandFailure(err)
 	}
-	members, err := setTypeDiff(objects[0], objects[1:]...)
+	members, err := setDiff(objects[0], objects[1:]...)
 	if err != nil {
-		return setCommandFailure(err)
+		return commandFailure(err)
 	}
 	return setMembersReply(members)
 }
@@ -465,11 +469,11 @@ func SInter(c *Client, args []string) CommandResult {
 
 	objects, err := lookupSetObjectsLocked(c.db, args)
 	if err != nil {
-		return setCommandFailure(err)
+		return commandFailure(err)
 	}
-	members, err := setTypeInter(objects...)
+	members, err := setInter(objects...)
 	if err != nil {
-		return setCommandFailure(err)
+		return commandFailure(err)
 	}
 	return setMembersReply(members)
 }
@@ -480,11 +484,11 @@ func SUnion(c *Client, args []string) CommandResult {
 
 	objects, err := lookupSetObjectsLocked(c.db, args)
 	if err != nil {
-		return setCommandFailure(err)
+		return commandFailure(err)
 	}
-	members, err := setTypeUnion(objects...)
+	members, err := setUnion(objects...)
 	if err != nil {
-		return setCommandFailure(err)
+		return commandFailure(err)
 	}
 	return setMembersReply(members)
 }

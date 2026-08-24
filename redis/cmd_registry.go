@@ -289,15 +289,15 @@ var TxCmdTable map[string]Command = map[string]Command{
 	},
 }
 
-// Zset commands are still in progress. Keep them out of the default command
+// ZSet commands are still in progress. Keep them out of the default command
 // table until the ranking/range implementation is complete.
 
-var ZsetCmdtable map[string]Command = map[string]Command{
+var ZSetCmdTable map[string]Command = map[string]Command{
 
 	"ZADD": {
 		Arity:   -3,
 		Flags:   CmdWrite,
-		Handler: Zadd,
+		Handler: ZAdd,
 	},
 	"ZCOUNT": {
 		Arity:   3,

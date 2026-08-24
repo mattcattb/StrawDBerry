@@ -140,7 +140,7 @@ func TestBasicSkiplistRemoveLastScoreResetsEmptyState(t *testing.T) {
 	}
 }
 
-func TestZsetOwnsTheMemberIndex(t *testing.T) {
+func TestZSetOwnsTheMemberIndex(t *testing.T) {
 	set := createZset()
 
 	if err := set.insertNew("sam", 8); err != nil {

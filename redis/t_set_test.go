@@ -8,9 +8,9 @@ import (
 
 func setObjectForTest(t *testing.T, members ...string) *RedisObject {
 	t.Helper()
-	obj := newSetObj()
-	if _, err := setTypeAdd(obj, members...); err != nil {
-		t.Fatalf("setTypeAdd(%q): %v", members, err)
+	obj := newSetObject()
+	if _, err := setAdd(obj, members...); err != nil {
+		t.Fatalf("setAdd(%q): %v", members, err)
 	}
 	return obj
 }
@@ -46,35 +46,35 @@ func replyIntegers(t *testing.T, result CommandResult) []int {
 }
 
 func TestSetTypeMutationsReportActualChanges(t *testing.T) {
-	obj := newSetObj()
+	obj := newSetObject()
 
-	added, err := setTypeAdd(obj, "", "go", "go")
+	added, err := setAdd(obj, "", "go", "go")
 	if err != nil {
-		t.Fatalf("setTypeAdd: %v", err)
+		t.Fatalf("setAdd: %v", err)
 	}
 	if added != 2 {
 		t.Fatalf("added = %d, want 2", added)
 	}
 
-	containsEmpty, err := setTypeContains(obj, "")
+	containsEmpty, err := setContains(obj, "")
 	if err != nil {
-		t.Fatalf("setTypeContains: %v", err)
+		t.Fatalf("setContains: %v", err)
 	}
 	if !containsEmpty {
 		t.Fatal("empty string member was not retained")
 	}
 
-	removed, err := setTypeRemove(obj, "go", "go", "missing")
+	removed, err := setRemove(obj, "go", "go", "missing")
 	if err != nil {
-		t.Fatalf("setTypeRemove: %v", err)
+		t.Fatalf("setRemove: %v", err)
 	}
 	if removed != 1 {
 		t.Fatalf("removed = %d, want 1", removed)
 	}
 
-	length, err := setTypeCardinality(obj)
+	length, err := setCardinality(obj)
 	if err != nil {
-		t.Fatalf("setTypeCardinality: %v", err)
+		t.Fatalf("setCardinality: %v", err)
 	}
 	if length != 1 {
 		t.Fatalf("cardinality = %d, want 1", length)
@@ -82,17 +82,17 @@ func TestSetTypeMutationsReportActualChanges(t *testing.T) {
 }
 
 func TestSetTypeOperationsDistinguishWrongTypeAndInvalidEncoding(t *testing.T) {
-	if _, err := setTypeCardinality(newStringObject("value")); !errors.Is(err, ErrWrongType) {
+	if _, err := setCardinality(newStringObject("value")); !errors.Is(err, ErrWrongType) {
 		t.Fatalf("string cardinality error = %v, want ErrWrongType", err)
 	}
 
 	invalid := &RedisObject{
-		typ:       SetObject,
-		encoding:  EncodingSetMap,
-		ptr:       hashMapPayload{},
+		typ:       ObjectTypeSet,
+		encoding:  ObjectEncodingSetMap,
+		payload:   hashMapPayload{},
 		expiresAt: noExpiration,
 	}
-	if _, err := setTypeCardinality(invalid); !errors.Is(err, ErrInvalidEncoding) {
+	if _, err := setCardinality(invalid); !errors.Is(err, ErrInvalidEncoding) {
 		t.Fatalf("invalid payload error = %v, want ErrInvalidEncoding", err)
 	}
 }
@@ -102,27 +102,27 @@ func TestSetTypeAlgebraHandlesMissingAndRepeatedOperands(t *testing.T) {
 	second := setObjectForTest(t, "b", "c", "d")
 	third := setObjectForTest(t, "c", "e")
 
-	difference, err := setTypeDiff(first, second, third)
+	difference, err := setDiff(first, second, third)
 	if err != nil {
-		t.Fatalf("setTypeDiff: %v", err)
+		t.Fatalf("setDiff: %v", err)
 	}
 	requireStringMembers(t, difference, "a")
 
-	difference, err = setTypeDiff(first, first)
+	difference, err = setDiff(first, first)
 	if err != nil {
-		t.Fatalf("setTypeDiff with repeated operand: %v", err)
+		t.Fatalf("setDiff with repeated operand: %v", err)
 	}
 	requireStringMembers(t, difference)
 
-	intersection, err := setTypeInter(first, nil, second)
+	intersection, err := setInter(first, nil, second)
 	if err != nil {
-		t.Fatalf("setTypeInter with missing operand: %v", err)
+		t.Fatalf("setInter with missing operand: %v", err)
 	}
 	requireStringMembers(t, intersection)
 
-	union, err := setTypeUnion(first, nil, second, third)
+	union, err := setUnion(first, nil, second, third)
 	if err != nil {
-		t.Fatalf("setTypeUnion: %v", err)
+		t.Fatalf("setUnion: %v", err)
 	}
 	requireStringMembers(t, union, "a", "b", "c", "d", "e")
 }
@@ -199,7 +199,7 @@ func TestSetCommandsRejectWrongTypeWithoutMutation(t *testing.T) {
 func TestSetNoOpWritesDoNotChangeDirtyStateOrAOF(t *testing.T) {
 	c := newStringCommandTestClient()
 	log := &recordingAof{}
-	c.aof = log
+	c.server.aof = log
 
 	if got := replyInteger(t, c.HandleCommand(redisCommand("SADD", "set", "member"))); got != 1 {
 		t.Fatalf("initial SADD count = %d, want 1", got)
@@ -225,9 +225,9 @@ func TestSetNoOpWritesDoNotChangeDirtyStateOrAOF(t *testing.T) {
 func TestSetCommandsMapCorruptEncodingToInternalError(t *testing.T) {
 	c := newStringCommandTestClient()
 	c.db.setKey("broken", &RedisObject{
-		typ:       SetObject,
-		encoding:  EncodingSetMap,
-		ptr:       hashMapPayload{},
+		typ:       ObjectTypeSet,
+		encoding:  ObjectEncodingSetMap,
+		payload:   hashMapPayload{},
 		expiresAt: noExpiration,
 	})
 

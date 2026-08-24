@@ -19,6 +19,29 @@ func tryParseInt(val string) (int, bool) {
 
 }
 
+func cloneStringPayload(obj *RedisObject) (objectPayload, error) {
+	if err := obj.checkType(ObjectTypeString); err != nil {
+		return nil, err
+	}
+
+	switch obj.encoding {
+	case ObjectEncodingStringRaw:
+		value, ok := obj.payload.(rawStringPayload)
+		if !ok {
+			return nil, ErrInvalidEncoding
+		}
+		return value, nil
+	case ObjectEncodingStringInt:
+		value, ok := obj.payload.(intStringPayload)
+		if !ok {
+			return nil, ErrInvalidEncoding
+		}
+		return value, nil
+	default:
+		return nil, ErrInvalidEncoding
+	}
+}
+
 func tryParseInt64(val string) (int64, bool) {
 	n, err := strconv.ParseInt(val, 10, 64)
 	if err != nil {
@@ -29,39 +52,36 @@ func tryParseInt64(val string) (int64, bool) {
 }
 
 func newStringObject(value string) *RedisObject {
-
 	if n, ok := tryParseInt(value); ok {
-		return &RedisObject{
-			typ:       StringObject,
-			encoding:  EncodingInt,
-			ptr:       intStringPayload(n),
-			expiresAt: noExpiration,
-		}
+		return newObject(
+			ObjectTypeString,
+			ObjectEncodingStringInt,
+			intStringPayload(n),
+		)
 	}
 
-	return &RedisObject{
-		typ:       StringObject,
-		encoding:  EncodingRaw,
-		ptr:       rawStringPayload(value),
-		expiresAt: noExpiration,
-	}
+	return newObject(
+		ObjectTypeString,
+		ObjectEncodingStringRaw,
+		rawStringPayload(value),
+	)
 }
 
-func stringObjectValue(obj *RedisObject) (string, error) {
-	if obj.typ != StringObject {
-		return "", ErrWrongType
+func stringValue(obj *RedisObject) (string, error) {
+	if err := obj.checkType(ObjectTypeString); err != nil {
+		return "", err
 	}
 
 	switch obj.encoding {
-	case EncodingRaw:
-		value, ok := obj.ptr.(rawStringPayload)
+	case ObjectEncodingStringRaw:
+		value, ok := obj.payload.(rawStringPayload)
 		if !ok {
 			return "", ErrInvalidEncoding
 		}
 		return string(value), nil
 
-	case EncodingInt:
-		value, ok := obj.ptr.(intStringPayload)
+	case ObjectEncodingStringInt:
+		value, ok := obj.payload.(intStringPayload)
 		if !ok {
 			return "", ErrInvalidEncoding
 		}
@@ -71,15 +91,20 @@ func stringObjectValue(obj *RedisObject) (string, error) {
 	return "", ErrInvalidEncoding
 }
 
-func setStringObjectValue(obj *RedisObject, value string) {
-	if n, ok := tryParseInt(value); ok {
-		obj.encoding = EncodingInt
-		obj.ptr = intStringPayload(n)
-		return
+func stringSet(obj *RedisObject, value string) error {
+	if err := obj.checkType(ObjectTypeString); err != nil {
+		return err
 	}
 
-	obj.encoding = EncodingRaw
-	obj.ptr = rawStringPayload(value)
+	if n, ok := tryParseInt(value); ok {
+		obj.encoding = ObjectEncodingStringInt
+		obj.payload = intStringPayload(n)
+		return nil
+	}
+
+	obj.encoding = ObjectEncodingStringRaw
+	obj.payload = rawStringPayload(value)
+	return nil
 }
 
 type setOptions struct {
@@ -203,12 +228,12 @@ func Set(c *Client, args []string) CommandResult {
 		return Failed(syntaxError())
 	}
 
-	obj, exists := c.db.lookupKeyLocked(key)
+	obj, exists, _ := c.db.lookupKeyLocked(key)
 	oldReply := Null()
 	if options.get && exists {
-		oldValue, err := stringObjectValue(obj)
+		oldValue, err := stringValue(obj)
 		if err != nil {
-			return Failed(wrongTypeError())
+			return commandFailure(err)
 		}
 		oldReply = BulkString(oldValue)
 	}
@@ -267,16 +292,16 @@ func Set(c *Client, args []string) CommandResult {
 
 func Get(c *Client, args []string) CommandResult {
 	key := args[0]
-	obj, exists := c.db.lookupKey(key)
+	obj, exists, _ := c.db.lookupKey(key)
 
 	if !exists {
 		return Result(Null())
 	}
 
-	val, err := stringObjectValue(obj)
+	val, err := stringValue(obj)
 
 	if err != nil {
-		return Failed(wrongTypeError())
+		return commandFailure(err)
 	}
 
 	return Result(BulkString(val))
@@ -348,15 +373,15 @@ func deltaStrValue(c *Client, key string, delta int) (int, error) {
 	c.db.mu.Lock()
 	defer c.db.mu.Unlock()
 
-	curObj, _ := c.db.lookupKeyLocked(key)
+	curObj, _, _ := c.db.lookupKeyLocked(key)
 
 	value := delta
 
 	if curObj != nil {
 		// cur obj exists
-		strVal, ok := stringObjectValue(curObj)
+		strVal, ok := stringValue(curObj)
 
-		if ok != nil || curObj.typ != StringObject {
+		if ok != nil || curObj.typ != ObjectTypeString {
 			return 0, ErrWrongType
 		}
 
@@ -367,7 +392,9 @@ func deltaStrValue(c *Client, key string, delta int) (int, error) {
 
 		value += n
 
-		setStringObjectValue(curObj, strconv.Itoa(value))
+		if err := stringSet(curObj, strconv.Itoa(value)); err != nil {
+			return 0, err
+		}
 	} else {
 		c.db.setKeyLocked(key, newStringObject(strconv.Itoa(value)))
 	}
@@ -379,13 +406,13 @@ func MGet(c *Client, args []string) CommandResult {
 	respValues := make([]Value, 0)
 
 	for _, key := range args {
-		obj, exists := c.db.lookupKey(key)
+		obj, exists, _ := c.db.lookupKey(key)
 		if !exists {
 			respValues = append(respValues, Null())
 			continue
 		}
 
-		strVal, err := stringObjectValue(obj)
+		strVal, err := stringValue(obj)
 		if err != nil {
 			respValues = append(respValues, Null())
 		} else {
@@ -429,16 +456,16 @@ func StrLen(c *Client, args []string) CommandResult {
 	c.db.mu.Lock()
 	defer c.db.mu.Unlock()
 
-	obj, exists := c.db.lookupKeyLocked(key)
+	obj, exists, _ := c.db.lookupKeyLocked(key)
 
 	if !exists {
 		return Result(Integer(0))
 	}
 
-	vStr, n := stringObjectValue(obj)
+	vStr, n := stringValue(obj)
 
 	if n != nil {
-		return Failed(wrongTypeError())
+		return commandFailure(n)
 	}
 
 	return Result(Integer(len(vStr)))

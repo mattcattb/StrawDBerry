@@ -32,14 +32,14 @@ type Server struct {
 	config    SConfig
 	clients   map[*Client]struct{}
 	ps        *PubSubServer
-	aof       *Aof
+	aof       AppendOnlyLog
 	db        *RedisDb
 	sh        *CommandTable
 	dirty     uint64
 	sStats    *ServerStats
 }
 
-func NewServer(db *RedisDb, aof *Aof, sh *CommandTable) *Server {
+func NewServer(db *RedisDb, aof AppendOnlyLog, sh *CommandTable) *Server {
 
 	ps := NewPubsubServer()
 

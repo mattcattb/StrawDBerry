@@ -2,6 +2,8 @@ package redis
 
 import (
 	"bufio"
+	"errors"
+	"io"
 	"os"
 	"sync"
 	"time"
@@ -24,6 +26,11 @@ type Aof struct {
 	fsPolicy FsyncPolicy
 	ticker   *time.Ticker
 	config   AofConfig
+}
+
+type AppendOnlyLog interface {
+	Append(Value) error
+	Replay(*Client, func(Value) error) error
 }
 
 type AofConfig struct {
@@ -124,6 +131,9 @@ func (a *Aof) Replay(executor *Client, exectution func(req Value) error) error {
 	for {
 		v, err := resp.Read()
 		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
 			return err
 		}
 

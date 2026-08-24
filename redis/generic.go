@@ -1,8 +1,10 @@
 package redis
 
 import (
+	"math"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func Keys(c *Client, args []string) CommandResult {
@@ -112,46 +114,48 @@ func globMatch(pattern, key string) bool {
 // OBJECT ENCODING
 
 func Copy(c *Client, args []string) CommandResult {
+	src, dest := args[0], args[1]
+	if len(args) > 3 || (len(args) == 3 && !strings.EqualFold(args[2], "REPLACE")) {
+		return Failed(syntaxError())
+	}
+	replace := len(args) == 3
 
-	return Failed(Error("not implemented yet"))
+	if src == dest {
+		return Failed(Error("ERR source and destination objects are the same"))
+	}
 
-	/*
-		srcK, destK := args[0], args[1]
-		replace := false
+	c.db.mu.Lock()
+	defer c.db.mu.Unlock()
 
-		// COPY source destination [REPLACE]
-		res := 0 // 0 not copied, 1 if copied
+	srcObj, exists, _ := c.db.lookupKeyLocked(src)
+	if !exists {
+		return Result(Integer(0))
+	}
 
-		if len(args) > 2 && args[2] == "REPLACE" {
-			replace = true
-		}
+	_, destinationExists, _ := c.db.lookupKeyLocked(dest)
+	if destinationExists && !replace {
+		return Result(Integer(0))
+	}
 
-		c.db.mu.Lock()
-		defer c.db.mu.Unlock()
+	cloned, err := srcObj.clone()
+	if err != nil {
+		return commandFailure(err)
+	}
 
-		src, e := c.db.lookupKey(srcK)
+	if destinationExists {
+		c.db.deleteKeyLocked(dest)
+	}
+	c.db.setKeyLocked(dest, cloned)
+	c.server.dirty++
 
-		if e {
-			// e exists so lets get the resp
-			dest, de := c.db.lookupKey(destK)
-
-			// replace IF replace true OR dest empty
-
-			if !de || replace {
-				newVal := RedisObject{}
-				copy(src, &newVal)
-				c.db.setKey(destK, &newVal)
-			}
-		}
-
-		return Result(Integer(res)) */
+	return Result(Integer(1))
 }
 
 func Exists(c *Client, args []string) CommandResult {
 	existCount := 0
 
 	for _, key := range args {
-		_, exists := c.db.lookupKey(key)
+		_, exists, _ := c.db.lookupKey(key)
 		if exists {
 			existCount += 1
 		}
@@ -161,8 +165,101 @@ func Exists(c *Client, args []string) CommandResult {
 
 }
 
+type expireCondition uint8
+
+const (
+	expireAlways expireCondition = iota
+	expireNX
+	expireXX
+	expireGT
+	expireLT
+)
+
+func shouldSetExpiration(obj *RedisObject, newExpiresAt int64, condition expireCondition) bool {
+	hasExpiration := obj.expiresAt != noExpiration
+
+	switch condition {
+	case expireAlways:
+		return true
+	case expireNX:
+		return !hasExpiration
+	case expireXX:
+		return hasExpiration
+
+	case expireGT:
+		return hasExpiration && newExpiresAt > obj.expiresAt
+
+	case expireLT:
+		return !hasExpiration || newExpiresAt < obj.expiresAt
+	default:
+		return false
+	}
+}
+
+func parseExpireCondition(args []string) (c expireCondition, err error) {
+	for i := 0; i < len(args); i++ {
+		switch strings.ToUpper(args[i]) {
+		case "NX":
+			c = expireNX
+		case "XX":
+			c = expireXX
+		case "GT":
+			c = expireGT
+		case "LT":
+			c = expireLT
+		default:
+			return 0, ErrWrongArgs
+		}
+	}
+
+	return c, nil
+}
+
 func Expire(c *Client, args []string) CommandResult {
-	return Failed(Error("ERR not implemented"))
+
+	key := args[0]
+
+	seconds, err := strconv.ParseInt(args[1], 10, 64)
+
+	if err != nil {
+		return Failed(invalidInteger())
+	}
+
+	condition, err := parseExpireCondition(args[2:])
+
+	if err != nil {
+		return Failed(syntaxError())
+	}
+
+	c.db.mu.Lock()
+	defer c.db.mu.Unlock()
+
+	obj, exists, _ := c.db.lookupKeyLocked(key)
+
+	retVal := 0
+
+	if exists {
+		now := time.Now().UnixMilli()
+		if seconds > 0 && seconds > (math.MaxInt64-now)/1000 {
+			return Failed(invalidInteger())
+		}
+		newExpiresAt := now
+		if seconds > 0 {
+			newExpiresAt += seconds * 1000
+		}
+		if shouldSetExpiration(obj, newExpiresAt, condition) {
+
+			if seconds <= 0 {
+				c.db.deleteKeyLocked(key)
+			} else {
+				obj.expiresAt = newExpiresAt
+			}
+			c.server.dirty++
+			retVal = 1
+		}
+	}
+
+	return Result(Integer(retVal))
 }
 
 func Ttl(c *Client, args []string) CommandResult {
@@ -178,13 +275,13 @@ func Ttl(c *Client, args []string) CommandResult {
 	c.db.mu.Lock()
 	defer c.db.mu.Unlock()
 
-	obj, exists := c.db.lookupKeyLocked(key)
+	obj, exists, _ := c.db.lookupKeyLocked(key)
 
 	if !exists {
 		return Result(Integer(-2))
 	}
 
-	seconds := obj.ttlForObject()
+	seconds := obj.ttlSeconds()
 	if seconds == -2 {
 		delete(c.db.dict, key)
 		c.db.stats.expiredKeys++
@@ -202,12 +299,12 @@ func Persist(c *Client, args []string) CommandResult {
 	c.db.mu.Lock()
 	defer c.db.mu.Unlock()
 
-	obj, exists := c.db.lookupKeyLocked(key)
+	obj, exists, _ := c.db.lookupKeyLocked(key)
 	if !exists || obj.expiresAt == noExpiration {
 		return Result(Integer(0))
 	}
 
-	obj.setExprMs(-1)
+	obj.persist()
 	c.server.dirty += 1
 	return Result(Integer(1))
 }
@@ -234,12 +331,12 @@ func Del(c *Client, args []string) CommandResult {
 func Type(c *Client, args []string) CommandResult {
 	key := args[0]
 
-	obj, exists := c.db.lookupKey(key)
+	obj, exists, _ := c.db.lookupKey(key)
 
 	if !exists {
 		return Result(SimpleString("none"))
 	}
-	str := obj.typ.Str()
+	str := obj.typ.String()
 	return Result(SimpleString(str))
 }
 
@@ -266,11 +363,11 @@ func Restore(c *Client, args []string) CommandResult {
 
 func ObjectEncodingCmd(c *Client, args []string) CommandResult {
 	key := args[0]
-	obj, e := c.db.lookupKey(key)
+	obj, e, _ := c.db.lookupKey(key)
 	if !e {
 		return Result(Null())
 	}
-	return Result(BulkString(obj.encoding.StrRep()))
+	return Result(BulkString(obj.encoding.String()))
 }
 func ObjFreqCmd(c *Client, args []string) CommandResult {
 	return Failed(Error("Not yet implemented"))
