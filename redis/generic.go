@@ -1,5 +1,7 @@
 package redis
 
+import "strings"
+
 // OBJECT ENCODING
 
 func Copy(c *Client, args []string) CommandResult {
@@ -184,3 +186,43 @@ func FlushAll(c *Client, args []string) CommandResult {
 	return Result(SimpleString("OK"))
 
 }
+
+func parsePattern(pattern string) (string, string) {
+	index := strings.Index(pattern, "*")
+
+	prefix := pattern[:index]
+	after := pattern[index+1:]
+
+	return prefix, after
+}
+
+func Keys(c *Client, args []string) CommandResult {
+
+	pattern := args[0]
+
+	prefix, _ := parsePattern(pattern)
+
+	matchingKeys := make([]Value, 0)
+
+	for k, _ := range c.db.dict {
+		if len(k) < len(prefix) {
+			continue
+		}
+
+		curPre, _ := parsePattern(k)
+		if curPre == prefix {
+			matchingKeys = append(matchingKeys, BulkString(k))
+		}
+	}
+
+	// pattern should be text:*
+
+	return Result(Array(matchingKeys))
+
+}
+
+/*
+func Scan(c *Client, args []string) CommandResult {
+
+}
+*/

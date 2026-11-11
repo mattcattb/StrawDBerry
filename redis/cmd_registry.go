@@ -200,6 +200,10 @@ var GenericCMDTable map[string]Command = map[string]Command{
 	"COMMANDCOUNT": {
 		Handler: CommandCount,
 	},
+	"KEYS": {
+		Handler: Keys,
+		Arity:   1,
+	},
 }
 
 var ConnectionCmdTable map[string]Command = map[string]Command{
